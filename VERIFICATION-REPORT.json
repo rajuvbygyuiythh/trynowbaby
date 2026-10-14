@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "createdAt": "2026-10-14T14:54:11.014Z",
+  "platform": "linux",
+  "node": "v22.22.3",
+  "overall": "BLOCKED",
+  "sourceFingerprint": "ea375e4f78c0fbe8f8def63e38818438e76061baa5b6b93f7e5ec72278a0c487",
+  "workflowFingerprint": "20b1037201534a861cbbcb316a871f6b736fe2e0890fce5b2a15a53149b383f9",
+  "checks": [
+    {
+      "name": "frontend-syntax",
+      "status": "PASS",
+      "detail": "Command completed successfully; log=frontend-syntax.txt",
+      "command": "/usr/local/bin/node",
+      "args": [
+        "--check",
+        "cmd/chitchatui/frontend/dist/app.js"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 53,
+      "reason": "Command completed successfully",
+      "log": "frontend-syntax.txt",
+      "logSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "ui-contract-package-tests",
+      "status": "PASS",
+      "detail": "Command completed successfully; log=ui-contract-package-tests.txt",
+      "command": "/usr/local/bin/node",
+      "args": [
+        "--test",
+        "tests/browser-ui.test.cjs",
+        "tests/contracts.test.cjs",
+        "tests/package.test.cjs",
+        "tests/verification.test.cjs"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 1261,
+      "reason": "Command completed successfully",
+      "log": "ui-contract-package-tests.txt",
+      "logSHA256": "edfdb8105383a1d969911ef5c1739eb3e27722ef5af3aacc8c392e2a9d05d458"
+    },
+    {
+      "name": "go-toolchain",
+      "status": "BLOCKED",
+      "detail": "Required tool not found on PATH; log=go-toolchain.txt",
+      "command": "go",
+      "args": [
+        "version"
+      ],
+      "exitCode": null,
+      "signal": null,
+      "durationMs": 1,
+      "reason": "Required tool not found on PATH",
+      "log": "go-toolchain.txt",
+      "logSHA256": "54d5935cd9729ee6ba3ee49c0e2a050dcacd8e5157af1d6cddd6ab1426f6cb51"
+    },
+    {
+      "name": "changed-go-format",
+      "status": "BLOCKED",
+      "detail": "Go toolchain unavailable; not executed"
+    },
+    {
+      "name": "go-dependencies",
+      "status": "BLOCKED",
+      "detail": "Go toolchain unavailable; not executed"
+    },
+    {
+      "name": "module-checksums",
+      "status": "BLOCKED",
+      "detail": "Go toolchain unavailable; not executed"
+    },
+    {
+      "name": "go-regression-tests",
+      "status": "BLOCKED",
+      "detail": "Go toolchain unavailable; not executed"
+    },
+    {
+      "name": "go-static-analysis",
+      "status": "BLOCKED",
+      "detail": "Go toolchain unavailable; not executed"
+    },
+    {
+      "name": "windows-cross-build",
+      "status": "BLOCKED",
+      "detail": "Go toolchain unavailable; not executed"
+    },
+    {
+      "name": "windows-app-tests",
+      "status": "BLOCKED",
+      "detail": "Go toolchain unavailable; not executed"
+    },
+    {
+      "name": "windows-app-vet",
+      "status": "BLOCKED",
+      "detail": "Go toolchain unavailable; not executed"
+    },
+    {
+      "name": "wails-production-build",
+      "status": "BLOCKED",
+      "detail": "Go toolchain unavailable; not executed"
+    },
+    {
+      "name": "source-unchanged-during-verification",
+      "status": "PASS",
+      "detail": "Includes source, tests, dependencies lock and verification scripts"
+    }
+  ],
+  "liveBrowser": "NOT_RUN",
+  "liveLogin": "NOT_RUN",
+  "note": "PASS means browser-free checks passed, not live Windows/login verification."
+}

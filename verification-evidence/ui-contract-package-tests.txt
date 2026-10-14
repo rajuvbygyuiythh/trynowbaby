@@ -1,0 +1,202 @@
+TAP version 13
+# Subtest: numbered list, count, per-row Run and no old save/radio/central button
+ok 1 - numbered list, count, per-row Run and no old save/radio/central button
+  ---
+  duration_ms: 117.788979
+  type: 'test'
+  ...
+# Subtest: clicked ChromeDP sends live inputs, prevents overlapping clicks, and leaves form edits intact
+ok 2 - clicked ChromeDP sends live inputs, prevents overlapping clicks, and leaves form edits intact
+  ---
+  duration_ms: 49.454786
+  type: 'test'
+  ...
+# Subtest: each row button dispatches its own backend; blank profile defaults
+ok 3 - each row button dispatches its own backend; blank profile defaults
+  ---
+  duration_ms: 49.840638
+  type: 'test'
+  ...
+# Subtest: invalid count never invokes backend
+ok 4 - invalid count never invokes backend
+  ---
+  duration_ms: 43.267974
+  type: 'test'
+  ...
+# Subtest: backend failure and unavailable binding show errors and restore buttons
+ok 5 - backend failure and unavailable binding show errors and restore buttons
+  ---
+  duration_ms: 30.26533
+  type: 'test'
+  ...
+# Subtest: fresh-browser worker status wins over late request acknowledgement
+ok 6 - fresh-browser worker status wins over late request acknowledgement
+  ---
+  duration_ms: 21.972773
+  type: 'test'
+  ...
+# Subtest: state refresh initializes browser defaults only once
+ok 7 - state refresh initializes browser defaults only once
+  ---
+  duration_ms: 32.25896
+  type: 'test'
+  ...
+# Subtest: browser form submit is prevented and does not choose a backend
+ok 8 - browser form submit is prevented and does not choose a backend
+  ---
+  duration_ms: 19.025857
+  type: 'test'
+  ...
+# Subtest: backend labels and descriptions are escaped
+ok 9 - backend labels and descriptions are escaped
+  ---
+  duration_ms: 26.10729
+  type: 'test'
+  ...
+# Subtest: routine cleanup does not hide the login result or launch failure
+ok 10 - routine cleanup does not hide the login result or launch failure
+  ---
+  duration_ms: 21.664824
+  type: 'test'
+  ...
+# Subtest: Show Mode always requests a visible browser without changing the Headless preference
+ok 11 - Show Mode always requests a visible browser without changing the Headless preference
+  ---
+  duration_ms: 28.063824
+  type: 'test'
+  ...
+# Subtest: every literal UI backend invocation has a public Go method
+ok 12 - every literal UI backend invocation has a public Go method
+  ---
+  duration_ms: 1.101484
+  type: 'test'
+  ...
+# Subtest: direct-run contract agrees across UI, Go, JS and TypeScript bindings
+ok 13 - direct-run contract agrees across UI, Go, JS and TypeScript bindings
+  ---
+  duration_ms: 0.315632
+  type: 'test'
+  ...
+# Subtest: all literal DOM IDs used by the frontend exist, and HTML IDs are unique
+ok 14 - all literal DOM IDs used by the frontend exist, and HTML IDs are unique
+  ---
+  duration_ms: 116.904754
+  type: 'test'
+  ...
+# Subtest: advertised drivers match factory and Show Mode resolves to visible Rod
+ok 15 - advertised drivers match factory and Show Mode resolves to visible Rod
+  ---
+  duration_ms: 0.827988
+  type: 'test'
+  ...
+# Subtest: live browser integration test is opt-in, never part of the default suite
+ok 16 - live browser integration test is opt-in, never part of the default suite
+  ---
+  duration_ms: 0.120347
+  type: 'test'
+  ...
+# Subtest: source inventory excludes runtime/private/build data but keeps embedded UI
+ok 17 - source inventory excludes runtime/private/build data but keeps embedded UI
+  ---
+  duration_ms: 1.061068
+  type: 'test'
+  ...
+# Subtest: fingerprint is order independent and detects any content change
+ok 18 - fingerprint is order independent and detects any content change
+  ---
+  duration_ms: 0.564705
+  type: 'test'
+  ...
+# Subtest: package integrity rejects tampering, missing and unexpected files
+ok 19 - package integrity rejects tampering, missing and unexpected files
+  ---
+  duration_ms: 4.897291
+  type: 'test'
+  ...
+# Subtest: release gate rejects blocked, stale and inconsistent reports
+ok 20 - release gate rejects blocked, stale and inconsistent reports
+  ---
+  duration_ms: 0.817815
+  type: 'test'
+  ...
+# Subtest: release gate rejects a report that omits required checks
+ok 21 - release gate rejects a report that omits required checks
+  ---
+  duration_ms: 0.356513
+  type: 'test'
+  ...
+# Subtest: source inventory excludes Windows case variants of private/runtime paths
+ok 22 - source inventory excludes Windows case variants of private/runtime paths
+  ---
+  duration_ms: 0.104795
+  type: 'test'
+  ...
+# Subtest: archive check rejects Windows drive and alternate-stream paths
+ok 23 - archive check rejects Windows drive and alternate-stream paths
+  ---
+  duration_ms: 1.220089
+  type: 'test'
+  ...
+# Subtest: workflow edits invalidate an otherwise unchanged source report
+ok 24 - workflow edits invalidate an otherwise unchanged source report
+  ---
+  duration_ms: 0.175793
+  type: 'test'
+  ...
+# Subtest: archive rejects case collisions, reserved device names and dot normalization
+ok 25 - archive rejects case collisions, reserved device names and dot normalization
+  ---
+  duration_ms: 2.578412
+  type: 'test'
+  ...
+# Subtest: archive diagnostics handle missing manifests and ignore harmless JSON key order
+ok 26 - archive diagnostics handle missing manifests and ignore harmless JSON key order
+  ---
+  duration_ms: 1.264387
+  type: 'test'
+  ...
+# Subtest: release status never treats blocked or skipped checks as PASS
+ok 27 - release status never treats blocked or skipped checks as PASS
+  ---
+  duration_ms: 0.599018
+  type: 'test'
+  ...
+# Subtest: preflight rejects non-EXE/wrong architecture without executing a file
+ok 28 - preflight rejects non-EXE/wrong architecture without executing a file
+  ---
+  duration_ms: 2.313762
+  type: 'test'
+  ...
+# Subtest: debug classification separates missing tools/network from actual dependency failures
+ok 29 - debug classification separates missing tools/network from actual dependency failures
+  ---
+  duration_ms: 0.502518
+  type: 'test'
+  ...
+# Subtest: required checks reject omissions, duplicates and invalid statuses
+ok 30 - required checks reject omissions, duplicates and invalid statuses
+  ---
+  duration_ms: 0.352472
+  type: 'test'
+  ...
+# Subtest: preflight validates runtime layout and streams reproducible file hashes
+ok 31 - preflight validates runtime layout and streams reproducible file hashes
+  ---
+  duration_ms: 2.036497
+  type: 'test'
+  ...
+# Subtest: preflight rejects symlinked runtime directories without following them
+ok 32 - preflight rejects symlinked runtime directories without following them
+  ---
+  duration_ms: 1.137633
+  type: 'test'
+  ...
+1..32
+# tests 32
+# suites 0
+# pass 32
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1229.237553

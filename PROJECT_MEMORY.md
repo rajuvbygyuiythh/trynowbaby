@@ -1,0 +1,278 @@
+# Project memory — trynowbaby / ChitChat Bot
+
+Last reviewed: **2026-10-14 (UTC)**. This is a documentation-only handoff requested by the owner: read the project and save memory on GitHub. No application code, configuration, dependencies, or archive contents were changed.
+
+## 1. Read this first: actual repository layout
+
+At reviewed commit `4bcd4047331b97107a015761edf03f23102a3dbe`, Git tracks **one file**:
+
+```text
+root-project-showmode-dom-UNVERIFIED.zip
+```
+
+The application is inside that archive, not checked out as a `root-project/` directory. This memory file is intentionally outside the ZIP so future sessions can read it directly on GitHub. Do not unpack and commit the application, replace the ZIP, regenerate its documentation, or make product changes merely to update memory.
+
+The ZIP contains **170 files**:
+
+- **165 files** under `root-project/` (935,359 uncompressed bytes).
+- `VERIFICATION-REPORT.json` and `SOURCE-MANIFEST.json` beside that directory.
+- Three logs under `verification-evidence/`.
+
+Archive SHA-256:
+
+```text
+428611a91dc63500fa579acd2291b095ef0bffb30fa497bf24d60e58dbbd2342
+```
+
+The bundled map's count of 163 excludes its two generated map/memory files. This is not a missing-source discrepancy. The bundled memory's last historical entry says full source was committed, but **that is not the layout of this repository at the reviewed commit**. Trust the actual Git tree, not that copied handoff claim.
+
+Paths in sections below are relative to the extracted `root-project/` unless explicitly described as repository-root paths. Extract to a separate scratch directory for read-only review; retain the original ZIP unchanged.
+
+### Startup reading order for another agent
+
+1. This repository-root `PROJECT_MEMORY.md` for current checkout facts.
+2. Archive `root-project/AGENTS.md` for inherited owner decisions and scope.
+3. Archive `docs/PROJECT_MAP.md` and `docs/PROJECT_MEMORY.md` for architecture/history.
+4. Archive `docs/SHOW_MODE.md` for the latest DOM-only implementation.
+5. `docs/VERIFICATION.md` plus the archive-root verification report before any build/release claim.
+6. For AI-lab work specifically: `apitest/HANDOFF.md`, then `apitest/PLAN.md`.
+
+The top additions in `AGENTS.md` supersede the older EVA-only restriction for explicitly authorized Browser direct-run, Show Mode, capture, verification, and documentation work. They are not permission for arbitrary refactors. The inherited notes say the owner prefers Bengali/Banglish communication.
+
+## 2. Product and technology
+
+**ChitChat Bot** is a **Windows desktop application**, not a web service. It uses Go + Wails with a plain HTML/CSS/JavaScript dashboard and a separate CLI worker to automate chats on chitchat.gg.
+
+- Main Go module: `chitchatbot`, language/toolchain requirement in `go.mod`: **Go 1.25.0**.
+- Wails: **v2.12.0**; Rod **v0.116.2**; ChromeDP **v0.14.2**.
+- Storage: Badger **v4.9.1** for dashboard settings/logs; JSON files for login and bot/registry state.
+- Realtime worker: Gorilla WebSocket, Socket.IO/Engine.IO parsing, uTLS.
+- Windows hardware licensing: WMI, with a remote license check.
+- Node package: private `chitchat-verification`; development-only dependencies **jsdom 26.1.0** and **fflate 0.8.2**. Node is not a production dashboard framework.
+- Capture is a standalone Node built-in-only tool, version **1.2.1**.
+- `apitest/` is a separate dependency-free Go module named `apitest`.
+
+### Canonical entry points
+
+| Path | Responsibility |
+|---|---|
+| `main.go` | Official Wails desktop entry; embeds `cmd/chitchatui/frontend/dist`; resolves `data/` from current working directory; uses bundled WebView2 when found. |
+| `app.go` | Official bound `App`: settings, snapshots/stats, licensing, browser requests/login persistence, Start/Stop workers, maintenance actions, events/logs. |
+| `live_chat.go` | Show Mode DOM runner and per-conversation sequence/EVA responders. |
+| `cmd/chitchatbot/main.go` | CLI flags/prompts for backend/profile/headless/data-dir; calls `bot.Run`. |
+| `cmd/chitchatui/frontend/dist/` | Actual maintained/embedded dashboard assets: `index.html`, `app.js`, `styles.css`. Keep these despite the directory being named `dist`. |
+| `cmd/chitchatui/frontend/wailsjs/` | JS/TypeScript Wails bindings and generated model types. Contracts must agree with public Go methods. |
+| `cmd/chitchatui/app.go`, `cmd/chitchatui/main.go` | Legacy duplicate desktop entry/app, not the official Wails build path. Leave alone; do not accidentally edit this copy instead of the root app. |
+
+## 3. Architecture and data flow
+
+### Internal package map
+
+| Package | Responsibility |
+|---|---|
+| `internal/model` | Login/cookie/fingerprint types, conversation/message/account state, EVA session, UI settings/defaults/migrations/snapshots. |
+| `internal/uistore` | Badger-backed settings and logs under `data/ui/badger`; normalization and legacy-message migration. |
+| `internal/store` | Directory creation and JSON load/save helpers. |
+| `internal/browser` | Shared `Backend` contract, Rod and ChromeDP login capture/page fetch, authentication probe, Rod proxy authentication/recovery, optional Rod `DOMChatBackend`. |
+| `internal/api` | Cookie-authenticated REST client with browser-style headers, saved user-agent, 30-second timeout and optional proxy rotation. |
+| `internal/bot` | Worker loop, friend requests/DMs/matches, sequences, EVA flow/AI compose, realtime events, traffic ownership, state, counters and activity logs. |
+| `internal/workerplan` | Discovers saved login workers, deduplicates account candidates, selects newer login records and assigns proxies. |
+| `internal/proxy` | Parses proxy lines/schemes/credentials and provides mutex-protected round-robin selection. |
+| `internal/runtimeassets` | Finds bundled Chromium/WebView2; compares profile/browser versions to avoid using an older bundled Chromium with a newer profile. |
+| `internal/license` | Generates a hardware-derived identifier and verifies licensing; Windows-specific and out of scope for fixes. |
+
+### Two independent runtime routes
+
+**Dashboard Browser → Run:** validates the clicked row/current inputs, validates proxy settings, saves accepted defaults, then asynchronously dispatches fresh login browsers. Count is **1–5 per request**, not a global cap. A successful request acknowledgement does not prove launch/login success. Fresh capture uses disposable OS temp profiles, saves uniquely named login JSON under `data/profiles/<profile>/`, closes the backend before deleting temp files, and preserves accepted settings even if launch later fails.
+
+**Dashboard Home → Start Bot:** discovers saved accounts, creates worker configs, and starts `internal/bot.Run`. Workers load or manually capture a login, identify/register their own account, start realtime listening, poll relationships/DMs, claim traffic, accept pending friend requests, respond, and match when idle. Expired saved sessions stop workers. This worker route still uses REST/WebSocket; it is not the Show Mode DOM loop.
+
+### Persistent/runtime data — never put in Git or memory
+
+- `data/ui/badger/`: UI settings, including optional AI credentials and proxy settings, plus logs.
+- `data/profiles/<profile>/`: login JSON, browser profiles, bot state and derived relationship/conversation/user files.
+- `data/eva_chat/`: editable starter TXT pack, seeded on demand from embedded source assets.
+- Shared bot/traffic registry JSON under the data directory: avoids bot-to-bot replies and multiple accounts claiming the same traffic user; tracks account send failures/status.
+- `capture/capture-sessions/` and `capture/profiles/`: browsing evidence and capture browser state.
+- `apitest/apitest.config.txt` and `apitest.log`: private tester configuration and transcripts.
+
+Do not read/copy/upload live cookies, tokens, API keys, passwords, login JSON, storage-state JSON, profiles, Badger files, private logs, `.env` files, or raw capture sessions. Embedded starter TXT files under `internal/bot/eva_assets/` are source assets, not private runtime data. Never reproduce source constants as if they were a user's credential.
+
+## 4. Dashboard contracts
+
+Tabs cover Home, Browser, Message, Proxy and General/timing settings. JS invokes `window.go.main.App`; it is not connected to an HTTP backend. Wails events include `ui:log`, `ui:running`, `ui:logs_cleared` and `ui:license_invalid`.
+
+Browser rows:
+
+1. `rod` — ordinary Rod fresh login capture.
+2. `chromedp` — ordinary ChromeDP fresh login capture.
+3. `show_mode` — visible Rod preset with live DOM chat after login.
+
+Each row has its own Run button, sharing Profile/Count/Headless inputs. Buttons prevent overlapping pending requests; they are usable again after acknowledgement. Browser defaults load once, so routine snapshot refreshes do not overwrite unsaved Browser edits. Worker status wins over a late acknowledgement; routine temp-cleanup logs do not replace a useful login/error status. Legacy `SaveBrowserSettings` and `RunFreshBrowsers` APIs remain for compatibility.
+
+Message mode keys are `single`, `folder`, `eva_chat_flow`. Saved legacy `keyword` mode migrates to EVA at read time. `keyword_chat.go` and old settings fields remain compatibility code; Keyword Based is not a current selectable dashboard mode. Folder mode retains loaded sequence strings and chooses a sequence rather than flattening all files.
+
+Home displays **ACTIVITY-level logs only**. Browser status displays fresh-browser lifecycle messages. Detailed info/error/probe messages may require looking at the corresponding event/status or persisted logs; do not assume every persisted message appears in Home.
+
+## 5. Show Mode — latest decision is DOM-only
+
+**Do not restore WebSocket/API chat transport for Show Mode.** It was implemented historically, then explicitly retired by the owner on 2026-10-14. Normal worker networking remains unchanged. The protocol documents are evidence for that worker, not a new Show Mode design approval.
+
+`validateBrowserRun` normalizes `show_mode` to `Backend=rod`, `Headless=false`, `LiveChat=true` before persistence/dispatch. The ordinary UI rows omit live-chat activation. Show Mode does not change the visible Headless preference checkbox and is not described as an anti-detection mode.
+
+1. User performs login and CAPTCHA manually in the visible Rod browser.
+2. Existing cookie/storage capture and authentication checks save the login normally.
+3. After save, `runLiveChat` keeps the browser open and uses optional `DOMChatBackend` methods only for chatting.
+4. Runner polls approximately every **1.5 seconds**; reply delay is **900 ms**, with **400 ms** between extra reply lines.
+5. Lobby clicks START with a six-second throttle. A new conversation seeds existing rows as history, starts a fresh responder and sends an opener.
+6. New messages are deduplicated by **author + text copy counts**; own sent echoes and known system rows are suppressed. Own display name is learned conservatively from repeated echoes.
+7. Sequence responders pick one sequence per conversation, opener first; EVA calls exported engine `Start`/`Reply` with fresh in-memory session state. Engine-load failure falls back to detection/logging only.
+8. End of flow clicks Skip/End/START; partner-left/input disappearance returns to lobby. Skip resets START throttling so rematching is not unnecessarily delayed.
+9. Closing the browser page ends the runner; backend close/temp cleanup are deferred.
+
+### DOM heuristics and debugging
+
+`internal/browser/domchat.go` contains injected page helpers. It identifies rendered rows containing an AM/PM clock time, extracts author/content lines, excludes nested containers and caps extraction to the last **40 rows**. Input discovery prefers placeholder/aria-label containing `message`, then the last visible text input. Buttons are matched by exact label first, substring second. Partner detection searches visible `chatting with ...` text.
+
+Sending focuses the input, uses `execCommand('insertText')` with native-setter/input-event fallback, tries a send button or form submit/Enter, then checks for matching rendered text for up to **three seconds**. This is a DOM-observation check, not server-delivery proof.
+
+If detection fails on Windows, obtain the `Page probe:` diagnostic (URL/input/button/row summary) and relevant layout evidence. Fix only the heuristics/authorized Show Mode path from that evidence. Do not guess new selectors or revive the retired transport.
+
+### Source-review caveats (not fixed in this memory-only task)
+
+- Show Mode does **not** apply the optional worker AI compose layer.
+- Its EVA responder calls raw engine `Reply`, not worker `evaChatReply`/`evaChatRender`; sequence responders likewise pass raw lines. Dashboard username substitution, no-username gating and worker counters must not be assumed equivalent in this route. Review this explicitly before promising working handle sharing in Show Mode.
+- Fresh browser runs use their own background-derived context; `StopBot` controls workers. Do not promise the Home Stop button cancels Show Mode; the documented reliable stop is closing its browser window.
+- DOM matching depends on live site layout, visible rows, labels and time formatting. Real-site success remains pending the owner's Windows retest.
+
+## 6. EVAChat Flow — TXT engine remains authoritative
+
+Key files: `internal/bot/eva_chat.go`, `eva_assets.go`, `eva_ai.go`, their tests, `internal/model/model.go`, worker adapters in `logic.go`, and `docs/CHAT_ENGINE_MAPPING.md`.
+
+- Same-named `input/<category>.txt` and `output/<category>.txt` connect user triggers to bot reply pools. Input ignores comments; output also splits on `|`. New category pairs join scanning automatically after priority categories.
+- Embedded starters are copied to `data/eva_chat/` **only when a file is missing**. User edits are not overwritten. Restart workers to reload edited TXT data.
+- Stages: **NEW → WAIT_AGE_GENDER → WAIT_COUNTRY → MIDDLE → END**.
+- Matching includes exact, whole-word substring, slang normalization, token-subset matching, plus category-specific regex/leet handling; English-only triggers use stricter matching.
+- Country detection uses longest keyword first. Worker session retains stage, age/gender/country, pool/line usage, ask/refusal flags, reply counters and a bounded transcript (60 lines).
+- A **detected/revealed age under 18 blocks sharing**. This is a text detector, not independently verified age assurance; preserve its rules/tests.
+- Direct handle requests may share immediately; bare yes only shares after the bot's ask. Firm refusal must not share. Other refusal gets one nudge, then a closer.
+- Suggestive/flirty categories arm the next snap ask. Neutral middle-chat has a proactive ask after three middle replies; the MIDDLE-stage reply cap is eight.
+- Most pools fire once per user. Repeatable pools include flirty questions, closer, horny, flirty reply, ask snap and horny answer. Fresh lines are preferred; immediate repeats are avoided when alternatives exist.
+- Multi-line incoming text uses the last nonempty line to drive the state machine.
+- Worker `%username%`/`{snap}` substitution uses the dashboard Usernames list with per-user assignment and existing share/flag counters; `{country}` uses detected country or fallback. No configured usernames makes worker sharing close politely.
+
+### Existing optional AI compose layer
+
+`eva_ai.go` rewrites **reply wording only**; TXT logic still controls stages/intent/sharing. OpenAI-compatible `/chat/completions`; defaults in this archive are `https://api.openai.com/v1`, `gpt-4o-mini`, 25-second timeout, 60 max tokens, temperature 0.9. Persona age/country are stable per session (age 20–25).
+
+Share/username-bearing lines are not rewritten. Output is constrained/sanitized (first line, short lowercase text; rejects forbidden links/usernames/AI-talk/repeats). API/validation failure retains TXT wording. Settings `AIEnabled`, `AIBaseURL`, `AIAPIKey`, `AIModel` remain local under data storage. Do not copy an API key into documentation.
+
+This already-present compose layer is **not** the separate apitest director integration; do not confuse the two.
+
+## 7. apitest — separate AI design lab, integration not approved yet
+
+`apitest/main.go` contains config/API client, deterministic director, quality guards, interactive loop, scripted scenario/compare runners and logging. Persona/scenarios/config example are source files; actual config/key/log are private. It has no imports from the production bot.
+
+Design recorded in `PLAN.md`/`HANDOFF.md`:
+
+- Interest tiers HOT/WARM/COLD with share targets at bot replies **4/6/8**; ask one reply before and conversational hooks earlier.
+- Parses stranger facts (age, gender, place, name/activity), keeps per-chat persona/lore, uses context moods and limited double replies.
+- Director handles underage/refusal/end/money/insults/non-English cases; guards retry once for problematic replies and polish obvious bot tells.
+- Username is appended by Go, not written by the model.
+- CLI commands include `ping`, `scenario <name|all>`, `compare <scenario>`, plus chat commands such as `/new`, `/state`, `/summary`.
+- API default documented/configured for Featherless and DeepSeek-V3-0324. Provider availability/model-access notes in the historical handoff are observations, not reverified facts today.
+- `AUTO_NOTHINK`/extra JSON options support reasoning-model configuration; they do not alter production AI code.
+
+**Current next step recorded in the archive:** owner runs real scenarios with their own key, supplies output for tuning, then designs integration together. Do not wire the director into `internal/bot` or alter the dashboard for AI-lab work without explicit approval. The handoff references an older repository/branch; use it for design history, not current Git checkout identity.
+
+## 8. Capture and protocol evidence
+
+Capture is manual browsing/recording, not a desktop runtime component or an automatic login/chat bot. It attaches through CDP, records HTTP/WebSocket events, DOM/storage hints and snapshots, correlates candidates with incoming/outgoing markers, and writes HAR, JSONL, catalogs, manifests and summaries. Config defaults to redaction; raw mode is explicit opt-in.
+
+Important files:
+
+- `capture/tool/browser.cjs`: browser discovery/launch, free port, up-to-45-second DevTools wait and browser startup logs.
+- `cdp.cjs`, `capture.cjs`, `hooks.js`: CDP connection/session handling and event/hook collection.
+- `classifier.cjs`, `catalog.cjs`, `wscatalog.cjs`: message candidates and endpoint/event schema catalogs.
+- `redactor.cjs`: redaction; v1.2.1 exempts `author`/`authors` from overbroad auth-key matching.
+- `store.cjs`, `har.cjs`, `capabilities.cjs`: output store, HAR and capture coverage summaries.
+- `compare.cjs`: baseline/new endpoint/event differences and schema fingerprints; writes diff reports.
+- `doctor.cjs` and `selftest/run-selftest.cjs`: **actually launch a browser**; do not run for a read-only/default browser-free task.
+
+Default redaction is not a guarantee of anonymization: messages, authors, HTML and screenshots can still be private. Never commit capture output or profiles, and never share raw-mode sessions.
+
+`docs/CHITCHAT_PROTOCOL.md` and `docs/chitchat-protocol.json` preserve distilled historical capture evidence: cookie-based auth, incoming Socket.IO `chatMessage`, outgoing multipart HTTP messages, and disconnect/match lifecycle. Their historical Show Mode transport design is explicitly superseded by DOM-only Show Mode. The historical example says author is a string, but actual worker parsing/history notes describe an author object `{id, username}`; use current parser/real captured shape rather than that simplified example for future worker changes.
+
+## 9. Build, verification and packaging
+
+Run commands **from extracted `root-project/`**, not this ZIP-only checkout.
+
+### Windows build/run
+
+```bat
+install.bat          rem install missing prerequisites, build, optionally run
+install.bat build    rem rebuild only
+install.bat run      rem launch dashboard
+install.bat bundle   rem build portable bundle
+run-dashboard.bat
+```
+
+Manual official build: `wails build -clean -webview2 error`.
+Portable bundle: `scripts/bundle-windows.ps1 -Clean`; targets Windows x64, produces `dist/windows-x64` with desktop/CLI binaries and Chromium/WebView2 runtimes. Runtime downloads are dynamic, not a certified pinned known-good browser set. Launch scripts establish working directories; `data/` is working-directory-relative, not universally executable-relative.
+
+### Browser-free verification gate
+
+```text
+npm ci --ignore-scripts --no-audit --no-fund
+npm test
+npm run verify
+```
+
+Windows `verify.bat` wraps dependency installation and the gate. `scripts/verify.cjs` refreshes AUTO map/memory blocks first, clears inherited `GOFLAGS`/`GOWORK` to avoid live browser tags, records commands/log hashes/durations, and writes `verification-output/report.json` atomically after invalidating old reports.
+
+Required named checks cover frontend syntax; UI/contract/package tests; Go toolchain/format/dependencies/module checksums; internal regressions/vet; Windows cross-build; Windows app tests/vet; Wails production build; source/workflow unchanged. Missing tools/network can be BLOCKED; actual code/module/checksum errors are FAIL. **BLOCKED is never PASS.** Windows-only execution/build checks cannot be proved just by Linux source inspection or cross-compilation.
+
+Test inventory includes Go lifecycle/direct-run/live fake-DOM tests; EVA/AI/sequence/registry/realtime/store/worker/runtime tests; Node UI/contracts/package/verification/map tests; separate capture tests; separate apitest signal tests. The proxy-auth integration test is opt-in behind `//go:build browser_live`. `npm test` also includes project-map tests; the current verify runner's Node subset does not. Capture/apitest are separate suites and not part of that runner.
+
+### Source release gate
+
+`npm run package:source` requires complete passing checks, fresh source/workflow fingerprints and matching log evidence. Explicit `--allow-unverified` keeps the UNVERIFIED label, but still requires complete/fresh report evidence. Archives contain source, verification report/evidence and SHA-256 manifest; path checks reject unsafe Windows names/streams/collisions. Integrity checking proves consistency, not authenticity, licensing or live login success.
+
+`node scripts/package-source.cjs --check <zip>` validates archive integrity. Optional bundle `scripts/preflight.cjs` checks x64 executable/runtime layout, checksums, symlinks and writability without running executables. Do not regenerate checksums merely to hide unexpected changes.
+
+The inherited verification docs mention `.github/workflows/browser-free-verification.yml` outside `root-project/`. **No workflow exists in this checkout or this source ZIP.** Do not claim GitHub Actions is configured/running here based on copied docs or the report's historical workflow fingerprint.
+
+## 10. Exact evidence status for this archive
+
+Bundled `VERIFICATION-REPORT.json`:
+
+- Created **2026-10-14T14:54:11.014Z**, Linux, Node **v22.22.3**.
+- Overall **BLOCKED**: **3 PASS**, **10 BLOCKED**, **0 FAIL**.
+- PASS: frontend syntax; UI/contract/package subset; source unchanged during verification.
+- Go toolchain was not on PATH in that recorded run, so dependent Go/build checks did not execute.
+- `liveBrowser`: **NOT_RUN**; `liveLogin`: **NOT_RUN**.
+- Source fingerprint: `ea375e4f78c0fbe8f8def63e38818438e76061baa5b6b93f7e5ec72278a0c487`.
+
+Historical docs also report isolated helper tests, prior engine tests, fake-DOM/jsdom simulations and a temporary mirrored-dependency Windows cross-build. Those are historical/scope-limited claims, not a replacement for this archive's full BLOCKED report or a new test run. The archive still awaits the owner's real Windows DOM Show Mode retest.
+
+### Checks performed for this memory-only review
+
+- Enumerated the complete archive and source tree; reviewed architecture, owner rules, docs, entry points, contracts, chat/browser flows, tooling and test inventory.
+- Read every ZIP entry for ZIP CRC and manifest verification: **all 169 manifest-listed payload SHA-256 hashes matched**; ZIP CRC check passed.
+- Recomputed all three included verification-log hashes: matched the bundled report.
+- No application tests, installers, live browser/login, remote license checks or AI requests were run. No package install/build was needed. This review **does not upgrade product verification to PASS**.
+
+## 11. Safe continuation rules and pending work
+
+1. Owner requested **read + memory only** in this task. Do not fix issues, refactor code, deploy, rebuild/repackage the archive, or add a CI workflow under that request.
+2. Preserve the ZIP and original embedded docs. This external memory augments them without editing AUTO blocks or invalidating their packaged source fingerprint.
+3. Keep Show Mode DOM-only and ordinary worker/API routes separate.
+4. Preserve underage blocking, refusal/no-username rules, compatibility migration, temp-profile cleanup and private-data boundaries.
+5. Never change licensing, driver/proxy behavior or schema just to make tests pass.
+6. Before meaningful future changes, get scope approval; use synthetic/temp-data checks by default; append a dated decision with honest evidence. Ask before destructive/remote actions not already authorized.
+7. Pending: owner's Windows retest and evidence-led DOM fixes if needed; complete Windows verification before release; real apitest scenario review before any director integration.
+8. For this review, GitHub publication is to session branch `arena/e0b2773e-trynowbaby`; no merge to `main` is implied.
+
+## Decision log
+
+- **2026-10-14 — Read-only project memory:** owner asked to read the project and add memory on GitHub. Added this external handoff for the ZIP-only repository, including architecture, owner decisions, source-review caveats and exact verification limitations. Original ZIP/application source unchanged. Archive CRC, all manifest payload hashes and included log hashes checked successfully; application/live tests NOT_RUN.

@@ -1,3 +1,28 @@
+## Latest handoff — provider rejection diagnostics for Test Proxy (2026-10-15)
+
+Owner reported the dashboard proxy test failing with `HTTP proxy rejected CONNECT
+(402)` for `http://p.webshare.io:80` (Webshare) and asked for a fresh, non-looping
+fix. Verification of the transport: the CONNECT the app sends is correct
+(`CONNECT host:port HTTP/1.1` + `Host` + `Proxy-Authorization: Basic …`), so the
+402 is the provider's own answer; the app previously discarded that answer, which
+is why the same question kept coming back. Change (scoped to the already-authorized
+proxy feature): `internal/proxy/connect.go` now returns a `TunnelError` carrying
+the proxy's status, `Proxy-Authenticate` value and a bounded (512 B / 1.2 s),
+credential-free, single-line excerpt of the proxy's rejection body;
+`internal/proxy/testproxy.go` adds `hint`, `provider_message`, `proxy_authenticate`
+and `authenticated` to each result and explains each status in plain language
+(including "this line has no username:password"); the dashboard renders
+"Provider said" / "Auth challenge" / "Next step". No new network request, no exit
+IP collection, no change to chat/AI/Home/worker/license code or dependencies.
+Evidence: `go test -race ./internal/proxy` PASS, `go vet ./internal/proxy` PASS,
+`go build ./internal/browser` PASS, 65 Node tests PASS (`npm test`), and the changed Go files are gofmt-clean.
+Full standard gate still dependency-BLOCKED (badger's vanity import paths are
+unreachable here); owner's real Windows/proxy acceptance NOT_RUN.
+Docs: root-project/docs/PROXY_TEST.md ("Provider rejection diagnostics" +
+Webshare checklist) and root-project/docs/PROJECT_MEMORY.md.
+
+---
+
 ## Latest feature handoff — 2026-10-15
 
 HTTP/SOCKS5 format support and dashboard Test Proxy implemented after owner's

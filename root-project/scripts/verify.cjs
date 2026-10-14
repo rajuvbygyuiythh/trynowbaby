@@ -110,6 +110,7 @@ function main() {
         "internal/proxy/proxy.go", "internal/proxy/connect.go",
         "internal/proxy/relay.go", "internal/proxy/testproxy.go",
         "internal/proxy/proxy_test.go", "internal/proxy/relay_test.go",
+        "internal/proxy/diagnostics_test.go",
       ],
       { emptyOutput: true },
     );

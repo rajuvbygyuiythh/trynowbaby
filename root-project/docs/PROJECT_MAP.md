@@ -12,18 +12,18 @@ _Auto-generated 2026-10-14 by `scripts/project-map.cjs`. Do not edit this block 
 
 ## Source inventory
 
-- Total source files: **184** (1039.8 KiB, excluding runtime/private data)
+- Total source files: **185** (1054.8 KiB, excluding runtime/private data)
 
 | Area | Files | Size |
 |---|---:|---:|
-| `internal/` | 87 | 433.3 KiB |
-| `capture/` | 25 | 114.1 KiB |
+| `internal/` | 88 | 443.3 KiB |
+| `capture/` | 25 | 114.3 KiB |
 | `(root files)` | 24 | 160.1 KiB |
 | `apitest/` | 12 | 99.3 KiB |
-| `docs/` | 12 | 68.3 KiB |
-| `cmd/` | 9 | 82.1 KiB |
+| `docs/` | 12 | 71.4 KiB |
+| `cmd/` | 9 | 82.7 KiB |
 | `scripts/` | 8 | 39.6 KiB |
-| `tests/` | 7 | 43.1 KiB |
+| `tests/` | 7 | 44.0 KiB |
 
 ## Internal Go packages
 
@@ -33,7 +33,7 @@ _Auto-generated 2026-10-14 by `scripts/project-map.cjs`. Do not edit this block 
 - `internal/browser/` — 9 Go file(s)
 - `internal/license/` — 1 Go file(s)
 - `internal/model/` — 2 Go file(s)
-- `internal/proxy/` — 6 Go file(s)
+- `internal/proxy/` — 7 Go file(s)
 - `internal/runtimeassets/` — 2 Go file(s)
 - `internal/store/` — 1 Go file(s)
 - `internal/uistore/` — 2 Go file(s)

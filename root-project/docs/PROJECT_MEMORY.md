@@ -9,10 +9,10 @@ after every meaningful change** (newest last). Never rewrite old entries.
 <!-- AUTO:BEGIN -->
 _Auto status 2026-10-14. Do not edit this block by hand._
 
-- Source fingerprint: `18493c9fddfb4727…`
+- Source fingerprint: `d925500ebaaed804…`
 - Browser options: `rod`, `chromedp`, `show_mode`
 - Capture tool: v1.2.1
-- Last verification: **BLOCKED** (PASS 5, FAIL 0, BLOCKED 8) — BLOCKED is not PASS; see `verification-output/report.json`
+- Last verification: no report found yet (`npm run verify`)
 <!-- AUTO:END -->
 
 ## Decision log
@@ -203,3 +203,26 @@ compile/race/vet and Windows-target test compilation in pinned-dependency isolat
 module PASS. Not a native Wails/Windows/owner-proxy verification. Full gate BLOCKED.
 See PROXY_TEST.md. Latest full source: root-project-proxy-dashboard-UNVERIFIED.zip.
 No dependency lock, chat/AI/Home/worker/license changes. No new remote push.
+
+## 2026-10-15 (later) — provider rejection diagnostics for Test Proxy
+
+Owner reported a real Webshare line failing the dashboard proxy test with
+`HTTP proxy rejected CONNECT (402)` and asked to stop looping and settle it.
+Investigation result: the CONNECT request the app sends was verified
+byte-for-byte (`CONNECT host:port HTTP/1.1`, `Host`, `Proxy-Authorization:
+Basic …`) and matches curl's shape, so the 402 is the provider's own answer and
+the app was previously throwing that answer away. Fix: `TunnelError` now carries
+the proxy's status, `Proxy-Authenticate` and a bounded (512 B / 1.2 s) body
+excerpt, sanitized to one credential-free line (tags stripped, control chars
+removed, username/password and Basic token redacted, 200-char cap); the test
+result gained `hint`, `provider_message`, `proxy_authenticate` and
+`authenticated`; the dashboard renders "Provider said"/"Auth challenge"/"Next
+step" and, for a line without credentials, says so explicitly. No new network
+request was added and no exit IP is collected. `internal/proxy/diagnostics_test.go`
+covers capture, redaction, sanitizing, truncation, 402/407/no-credential hints
+and the network-failure hint. Evidence: `go test -race ./internal/proxy`,
+`go vet ./internal/proxy`, `go build ./internal/browser`, 65 Node tests PASS.
+The full standard gate stays dependency-BLOCKED (badger's
+`golang.org/x/net`, `google.golang.org/protobuf`, `go.opentelemetry.io/otel`
+vanity paths are unreachable from this sandbox), and the owner's real
+proxy/Windows acceptance is still NOT_RUN. Behaviour docs: PROXY_TEST.md.

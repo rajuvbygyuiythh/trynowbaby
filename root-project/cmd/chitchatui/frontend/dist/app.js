@@ -341,7 +341,11 @@ async function testProxyEntries() {
       if (row.tunnel_ok) reachable++;
       const item = document.createElement("p");
       item.className = row.ok ? "proxy-test-pass" : row.tunnel_ok ? "proxy-test-warn" : "proxy-test-fail";
+      // textContent only: proxy/provider text is never treated as markup.
       item.textContent = `Line ${row.line}: ${row.ok ? "PASS" : row.tunnel_ok ? "REACHABLE / SITE RESTRICTED" : "FAIL"} — ${row.label || "Invalid entry"} — ${row.latency_ms} ms${row.status ? ` — HTTP ${row.status}` : ""} — ${row.detail}`;
+      if (row.provider_message) item.textContent += `\nProvider said: “${row.provider_message}”`;
+      if (row.proxy_authenticate) item.textContent += `\nAuth challenge: ${row.proxy_authenticate}`;
+      if (row.hint) item.textContent += `\nNext step: ${row.hint}`;
       results.appendChild(item);
     }
     status.textContent = `${passed}/${(rows || []).length} passed; ${reachable} HTTPS tunnels verified. A successful test is not a browser-login guarantee.`;

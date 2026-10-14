@@ -99,3 +99,55 @@ click Test Proxy, inspect each row, then Save Proxy and enable it for browsers.
 Try HTTP and SOCKS5 with/without authentication, bad credentials, mixed formats,
 and browser close/reopen. Retest Show Mode and Home actual SMS unchanged.
 Never share proxy passwords, cookies, profiles or unredacted logs.
+
+## Provider rejection diagnostics (2026-10-15, later same day)
+
+Owner reported a Webshare line (`http://p.webshare.io:80`) failing the dashboard
+test with `HTTP proxy rejected CONNECT (402)` and no way to tell why. The wire
+format was re-checked byte-for-byte locally and is correct
+(`CONNECT host:port HTTP/1.1` + `Host` + `Proxy-Authorization: Basic …`); the
+remaining question is always what the provider itself answered.
+
+Per failing line the dashboard now adds, in addition to the existing summary:
+
+- **Provider said:** a sanitized excerpt (max 200 chars, single line) of the
+  proxy's own rejection body — HTML tags stripped, control characters removed,
+  the configured username/password and their Basic token replaced with `***`.
+  The read is bounded to 512 bytes / 1.2 s and can never fail the check.
+- **Auth challenge:** the provider's `Proxy-Authenticate` value, if offered.
+- **Next step:** one plain-language action derived from the status code, or
+  from "no HTTP answer at all" when the TCP/handshake layer failed.
+- **authenticated**: whether the tested line actually contained `user:pass`.
+  A rejection on a line without credentials says so explicitly, because that is
+  the most common cause of a 402/407 with a provider endpoint copied as
+  `host:port` only.
+
+Nothing new is sent anywhere: the same single HTTPS HEAD to
+`https://app.chitchat.gg/` through the proxy is still the only request, and no
+exit IP is collected. Sanitization rules are covered by
+`internal/proxy/diagnostics_test.go`.
+
+## Webshare-specific checklist
+
+Webshare answers with real HTTP statuses; read the new "Provider said" line
+first, then:
+
+| Status | Meaning at Webshare | What to do |
+|--------|--------------------|------------|
+| 402 + line has no credentials | The proxy was called without authentication. | Use `p.webshare.io:80:user:pass` (same username/password pair from the dashboard) or authorize this machine's IP. |
+| 402 + credentials present | Account/entitlement answer: expired plan, exhausted monthly bandwidth, or a username that does not belong to this endpoint. | Check Dashboard → My Plan and Stats → Errors. Copy address, port, username and password from **one** Connection Method view (Rotating / Backbone / Direct). |
+| 407 | `no_proxies_allocated`-class refusal: that username/port combination is not on the current list. | Re-copy from the same view; prefer Backbone/Rotating if the plan auto-replaces proxies. |
+| 403 | `client_connect_forbidden_host`: Webshare blocks that destination for that proxy type (common on residential plans). | Try another Webshare proxy type/plan, or another proxy provider. |
+| 429 | `client_connect_high_concurrency`: too many parallel requests. | Lower parallel browsers/proxies through that endpoint. |
+
+Fastest way to separate "app problem" from "provider problem" on Windows: run
+the same line with the built-in curl (PowerShell or cmd):
+
+```bat
+curl -v -x "http://USER:PASS@p.webshare.io:80" https://example.com
+```
+
+If curl fails with the same status, the provider/credentials are the cause (the
+app is only repeating the answer). If curl succeeds while the app fails, report
+that difference — the app's CONNECT request is then compared byte-for-byte with
+curl's.

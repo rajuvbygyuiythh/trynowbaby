@@ -151,3 +151,27 @@ If curl fails with the same status, the provider/credentials are the cause (the
 app is only repeating the answer). If curl succeeds while the app fails, report
 that difference — the app's CONNECT request is then compared byte-for-byte with
 curl's.
+
+## Multi-site upgrade (2026-10-15, later)
+
+The same checks now work against **any** site and can report geo, so a new
+target site can be triaged in one pass instead of one debugging session:
+
+- `TestProxyEntriesFor(raw, endpoint, checkExitIP, exitIPURL)` — the dashboard
+  binding behind the new **Test site URL** field. `TestProxyEntries` is kept as
+  a wrapper with the historical default target, so nothing else changed.
+- **Exit IP + country** (opt-in checkbox, one extra request per proxy): parsed
+  from JSON (`ip`/`ipv4`/`query`/`ip_address`/`origin` + `country`/`country_code`
+  /`country_name`) or from plain text. A failing lookup only sets
+  `exit_ip_error`; it never changes PASS/FAIL.
+- **Check site directly (no proxy)** calls `netdiag.Direct` and names the failing
+  layer (DNS / TCP / TLS / HTTP, each timed) so "site blocked us" and "our side
+  is broken" are no longer guesswork.
+- **Copy report** puts the rendered rows on the clipboard and deliberately
+  excludes the proxy list (it can contain passwords).
+- The browser relay now prints the real upstream reason once per distinct
+  failure to stdout → `logs.txt`:
+  `[proxy] upstream connection to host:443 failed — HTTP 402: … | provider said: …`.
+
+Command-line equivalent for many sites at once: `netdoctor.bat` — see
+`docs/NET_DOCTOR.md` for flags, exit codes, the decision table and the limits.

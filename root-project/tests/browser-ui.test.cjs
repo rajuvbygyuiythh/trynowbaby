@@ -244,23 +244,27 @@ test('transcript keeps reader position, follows bottom, and announces bounded hi
  } finally {dom.window.close();}
 });
 
-test('Test Proxy checks unsaved form without saving, blocks repeats and renders literal results', async () => {
+test('Test Proxy checks unsaved form against any site, blocks repeats and renders literal results', async () => {
   let resolve; const calls=[];
-  const {dom,w,d}=setup({TestProxyEntries:raw=>{calls.push(raw);return new Promise(r=>resolve=r);},SaveProxySettings:()=>{throw Error('must not save');}});
+  const {dom,w,d}=setup({TestProxyEntriesFor:(...args)=>{calls.push(plain(args));return new Promise(r=>resolve=r);},SaveProxySettings:()=>{throw Error('must not save');}});
   d.querySelector('#proxy-enabled').checked=false;
   d.querySelector('#proxy-entries').value='socks5://host:1080:u:p\nhttp://host2:80';
+  d.querySelector('#proxy-test-url').value=' https://newsite.example/ ';
+  d.querySelector('#proxy-test-exitip').checked=true;
   const pending=w.testProxyEntries();
   assert.equal(d.querySelector('#test-proxy').disabled,true);
   await w.testProxyEntries();assert.equal(calls.length,1);
-  assert.equal(calls[0],d.querySelector('#proxy-entries').value);
+  assert.deepEqual(calls[0],[d.querySelector('#proxy-entries').value,'https://newsite.example/',true,'https://api.ipify.org/?format=json']);
   d.querySelector('#proxy-entries').value='edited:80';
-  resolve([{line:1,label:'socks5://host:1080',ok:true,status:200,latency_ms:12,detail:'PASS'}, {line:2,label:'<img src=x>',ok:false,tunnel_ok:true,status:403,latency_ms:9,detail:'<script>bad</script>',provider_message:'quota <b>exhausted</b>',proxy_authenticate:'Basic realm="proxy"',hint:'Test another proxy plan.'}, {line:3,label:'http://p.example:80',ok:false,status:402,latency_ms:250,detail:'HTTP proxy rejected CONNECT (402)',authenticated:false,hint:'The proxy answered 402 for a line without credentials.'}]);
+  resolve([{line:1,label:'socks5://host:1080',ok:true,status:200,latency_ms:12,detail:'PASS',exit_ip:'203.0.113.7',exit_country:'SG'}, {line:2,label:'<img src=x>',ok:false,tunnel_ok:true,status:403,latency_ms:9,detail:'<script>bad</script>',provider_message:'quota <b>exhausted</b>',proxy_authenticate:'Basic realm="proxy"',hint:'Test another proxy plan.'}, {line:3,label:'http://p.example:80',ok:false,status:402,latency_ms:250,detail:'HTTP proxy rejected CONNECT (402)',authenticated:false,hint:'The proxy answered 402 for a line without credentials.'}]);
   await pending;
   assert.equal(d.querySelector('#test-proxy').disabled,false);
   assert.equal(d.querySelector('#test-proxy').textContent,'Test Proxy');
-  assert.match(d.querySelector('#proxy-test-status').textContent,/1\/3 passed.*List edited/);
+  assert.match(d.querySelector('#proxy-test-status').textContent,/1\/3 passed against https:\/\/newsite\.example\/.*List edited/);
+  assert.match(d.querySelector('#proxy-test-status').textContent,/Exit countries seen: SG/);
   assert.equal(d.querySelector('#proxy-test-results img, #proxy-test-results script'),null);
   assert.match(d.querySelector('#proxy-test-results').textContent,/REACHABLE \/ SITE RESTRICTED.*HTTP 403/);
+  assert.match(d.querySelector('#proxy-test-results').textContent,/Exit IP: 203\.0\.113\.7 \(SG\)/);
   assert.match(d.querySelector('#proxy-test-results').textContent,/Provider said: “quota <b>exhausted<\/b>”/);
   assert.match(d.querySelector('#proxy-test-results').textContent,/Auth challenge: Basic realm="proxy"/);
   assert.match(d.querySelector('#proxy-test-results').textContent,/Next step: Test another proxy plan\./);
@@ -269,8 +273,38 @@ test('Test Proxy checks unsaved form without saving, blocks repeats and renders 
   assert.equal(d.querySelector('#proxy-entries').value,'edited:80');
   dom.window.close();
 });
+
+test('direct site check explains the baseline without touching the proxy list', async () => {
+  const calls=[];
+  const {dom,w,d}=setup({DiagnoseTarget:(target)=>{calls.push(target);return {url:target,scheme:'https',host:'newsite.example',dns_ips:['93.184.216.34'],dns_ms:5,tcp_ms:40,tls_ms:70,status:200,ok:true,detail:'reachable directly: HTTP 200 in 120 ms'};}});
+  d.querySelector('#proxy-test-url').value='https://newsite.example/';
+  await w.diagnoseTarget();
+  assert.deepEqual(calls,['https://newsite.example/']);
+  const text=d.querySelector('#proxy-target-results').textContent;
+  assert.match(text,/PASS — https:\/\/newsite\.example — HTTP 200 — dns 5 ms, tcp 40 ms, tls 70 ms/);
+  assert.match(text,/DNS: 93\.184\.216\.34/);
+  assert.match(d.querySelector('#proxy-target-status').textContent,/reachable from this machine without a proxy/);
+  assert.equal(d.querySelector('#diagnose-target').disabled,false);
+  dom.window.close();
+});
+
+test('copy report never includes the proxy list and explains clipboard failures', async () => {
+  let copied='';
+  const {dom,w,d}=setup({DiagnoseTarget:async()=>({scheme:'https',host:'x.example',status:200,ok:true,detail:'ok',dns_ips:[],dns_ms:1,tcp_ms:1,tls_ms:1})});
+  w.runtime={ClipboardSetText:async text=>{copied=text;}};
+  d.querySelector('#proxy-entries').value='host:1080:user:secretpass';
+  d.querySelector('#proxy-test-url').value='https://x.example/';
+  await w.diagnoseTarget();
+  await w.copyProxyReport();
+  assert.match(copied,/Proxy report — target https:\/\/x\.example\//);
+  assert.match(copied,/== Direct check ==/);
+  assert.ok(!copied.includes('secretpass'),'proxy list must never be copied');
+  assert.match(d.querySelector('#proxy-test-status').textContent,/Report copied/);
+  dom.window.close();
+});
+
 test('Test Proxy empty/error handling and SOCKS5 default do not alter explicit HTTP lines', async () => {
-  const calls=[];const {dom,w,d}=setup({TestProxyEntries:raw=>{calls.push(raw);throw Error('synthetic test error');}});
+  const calls=[];const {dom,w,d}=setup({TestProxyEntriesFor:(raw,...rest)=>{calls.push([raw,...rest]);throw Error('synthetic test error');}});
   await w.testProxyEntries();assert.equal(calls.length,0);
   d.querySelector('#proxy-default-scheme').value='socks5';
   d.querySelector('#proxy-entries').value='host:1080:u:p\nhttp://other:80\n\n';

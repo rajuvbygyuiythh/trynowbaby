@@ -322,33 +322,55 @@ function proxyInputLines() {
   }).join("\n");
 }
 
+function proxyTestTarget() {
+  const field = document.getElementById("proxy-test-url");
+  const value = (field.value || "").trim();
+  return value || "https://app.chitchat.gg/";
+}
+
+function proxyTestExitIP() {
+  const enabled = document.getElementById("proxy-test-exitip").checked;
+  const url = (document.getElementById("proxy-test-exitip-url").value || "").trim();
+  return { enabled, url: url || "https://api.ipify.org/?format=json" };
+}
+
+function renderProxyRow(row) {
+  const item = document.createElement("p");
+  item.className = row.ok ? "proxy-test-pass" : row.tunnel_ok ? "proxy-test-warn" : "proxy-test-fail";
+  // textContent only: proxy/provider text is never treated as markup.
+  item.textContent = `Line ${row.line}: ${row.ok ? "PASS" : row.tunnel_ok ? "REACHABLE / SITE RESTRICTED" : "FAIL"} — ${row.label || "Invalid entry"} — ${row.latency_ms} ms${row.status ? ` — HTTP ${row.status}` : ""} — ${row.detail}`;
+  if (row.exit_ip) item.textContent += `\nExit IP: ${row.exit_ip}${row.exit_country ? ` (${row.exit_country})` : ""}`;
+  if (row.exit_ip_error) item.textContent += `\nExit IP: not determined — ${row.exit_ip_error}`;
+  if (row.provider_message) item.textContent += `\nProvider said: “${row.provider_message}”`;
+  if (row.proxy_authenticate) item.textContent += `\nAuth challenge: ${row.proxy_authenticate}`;
+  if (row.hint) item.textContent += `\nNext step: ${row.hint}`;
+  return item;
+}
+
 async function testProxyEntries() {
   const button = document.getElementById("test-proxy");
   if (button.disabled) return;
   const raw = proxyInputLines();
+  const target = proxyTestTarget();
+  const exit = proxyTestExitIP();
   const status = document.getElementById("proxy-test-status");
   const results = document.getElementById("proxy-test-results");
   results.replaceChildren();
   if (!raw.trim()) { status.textContent = "Enter at least one proxy to test."; return; }
   button.disabled = true;
   button.textContent = "Testing…";
-  status.textContent = "Testing proxy authentication and HTTPS access… (up to 12 seconds per proxy; four at a time)";
+  status.textContent = `Testing proxy authentication against ${target}… (up to 12 seconds per proxy; four at a time)`;
   try {
-    const rows = await invoke("TestProxyEntries", raw);
-    let passed = 0, reachable = 0;
+    const rows = await invoke("TestProxyEntriesFor", raw, target, exit.enabled, exit.url);
+    let passed = 0, reachable = 0, countries = new Set();
     for (const row of rows || []) {
       if (row.ok) passed++;
       if (row.tunnel_ok) reachable++;
-      const item = document.createElement("p");
-      item.className = row.ok ? "proxy-test-pass" : row.tunnel_ok ? "proxy-test-warn" : "proxy-test-fail";
-      // textContent only: proxy/provider text is never treated as markup.
-      item.textContent = `Line ${row.line}: ${row.ok ? "PASS" : row.tunnel_ok ? "REACHABLE / SITE RESTRICTED" : "FAIL"} — ${row.label || "Invalid entry"} — ${row.latency_ms} ms${row.status ? ` — HTTP ${row.status}` : ""} — ${row.detail}`;
-      if (row.provider_message) item.textContent += `\nProvider said: “${row.provider_message}”`;
-      if (row.proxy_authenticate) item.textContent += `\nAuth challenge: ${row.proxy_authenticate}`;
-      if (row.hint) item.textContent += `\nNext step: ${row.hint}`;
-      results.appendChild(item);
+      if (row.exit_country) countries.add(row.exit_country);
+      results.appendChild(renderProxyRow(row));
     }
-    status.textContent = `${passed}/${(rows || []).length} passed; ${reachable} HTTPS tunnels verified. A successful test is not a browser-login guarantee.`;
+    status.textContent = `${passed}/${(rows || []).length} passed against ${target}; ${reachable} HTTPS tunnels verified. A successful test is not a browser-login guarantee.`;
+    if (countries.size) status.textContent += ` Exit countries seen: ${[...countries].join(", ")} — check the target site accepts them.`;
     if (proxyInputLines() !== raw) status.textContent += " List edited: these results are for the previous tested values; test again.";
   } catch (error) {
     status.textContent = error.message || String(error);
@@ -358,8 +380,68 @@ async function testProxyEntries() {
   }
 }
 
+async function diagnoseTarget() {
+  const button = document.getElementById("diagnose-target");
+  if (button.disabled) return;
+  const target = proxyTestTarget();
+  const status = document.getElementById("proxy-target-status");
+  const results = document.getElementById("proxy-target-results");
+  results.replaceChildren();
+  button.disabled = true;
+  button.textContent = "Checking…";
+  status.textContent = `Checking ${target} directly, without any proxy…`;
+  try {
+    const result = await invoke("DiagnoseTarget", target);
+    const item = document.createElement("p");
+    item.className = result.ok ? "proxy-test-pass" : "proxy-test-fail";
+    item.textContent = `${result.ok ? "PASS" : "FAIL"} — ${result.scheme}://${result.host}${result.status ? ` — HTTP ${result.status}` : ""} — dns ${result.dns_ms} ms, tcp ${result.tcp_ms} ms, tls ${result.tls_ms} ms — ${result.detail}`;
+    if ((result.dns_ips || []).length) item.textContent += `\nDNS: ${result.dns_ips.join(", ")}`;
+    if (result.hint) item.textContent += `\nNext step: ${result.hint}`;
+    results.appendChild(item);
+    status.textContent = result.ok
+      ? "The site is reachable from this machine without a proxy: a proxy failure is then about the proxy, not the site or your network."
+      : "The site is NOT reachable without a proxy: fix that baseline before blaming a proxy line.";
+  } catch (error) {
+    status.textContent = error.message || String(error);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Check site directly (no proxy)";
+  }
+}
+
+function proxyReportText() {
+  const target = proxyTestTarget();
+  const lines = [`Proxy report — target ${target}`, `Generated: ${new Date().toISOString()}`];
+  const proxyRows = [...document.querySelectorAll("#proxy-test-results p")].map(node => node.textContent);
+  const directRows = [...document.querySelectorAll("#proxy-target-results p")].map(node => node.textContent);
+  lines.push("", "== Direct check ==", directRows.length ? directRows.join("\n") : "(not run)");
+  lines.push("", "== Proxy lines ==", proxyRows.length ? proxyRows.join("\n") : "(not run)");
+  lines.push("", "Proxy list was NOT copied here on purpose (it can contain passwords). Paste only the lines above when reporting.");
+  return lines.join("\n");
+}
+
+async function copyProxyReport() {
+  const status = document.getElementById("proxy-test-status");
+  const text = proxyReportText();
+  try {
+    const runtime = runtimeEvents();
+    if (typeof runtime.ClipboardSetText === "function") {
+      await runtime.ClipboardSetText(text);
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      throw new Error("clipboard unavailable");
+    }
+    status.textContent = "Report copied (proxy list and passwords are not included).";
+  } catch (error) {
+    status.textContent = `Could not copy automatically (${error.message || error}). Select the text above and copy it manually.`;
+  }
+}
+
 function bindForms() {
   document.getElementById("test-proxy").addEventListener("click", testProxyEntries);
+  document.getElementById("diagnose-target").addEventListener("click", diagnoseTarget);
+  document.getElementById("copy-proxy-report").addEventListener("click", copyProxyReport);
   // Enter must not submit/reload the page or implicitly choose a backend.
   document.getElementById("browser-form").addEventListener("submit", (event) => {
     event.preventDefault();

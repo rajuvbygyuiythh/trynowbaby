@@ -142,14 +142,32 @@
             HTTP / SOCKS5: <code>host:port</code>, <code>host:port:user:pass</code>, <code>http://user:pass@host:port</code>, <code>socks5://user:pass@host:port</code>, or <code>socks5://host:port:user:pass</code>. Plain lines use the selected default protocol (HTTP initially); explicit URL prefixes override it. IPv6 must use brackets; URL-encode special characters in URL credentials. Test checks up to 20 lines without saving or logging in.
           </div>
 
+          <label>
+            <span>Test site URL (any http/https site)</span>
+            <input type="text" id="proxy-test-url" value="https://app.chitchat.gg/" spellcheck="false">
+          </label>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="proxy-test-exitip">
+            <span>Also check exit IP + country (one extra request through each proxy)</span>
+          </label>
+          <label>
+            <span>Exit IP service (used only when the box above is checked)</span>
+            <input type="text" id="proxy-test-exitip-url" value="https://api.ipify.org/?format=json" spellcheck="false">
+          </label>
+
           <div class="form-actions">
             <button type="submit" class="primary-button">Save Proxy</button>
             <button type="button" class="secondary-button" id="test-proxy">Test Proxy</button>
+            <button type="button" class="secondary-button" id="diagnose-target">Check site directly (no proxy)</button>
+            <button type="button" class="secondary-button" id="copy-proxy-report">Copy report</button>
           </div>
         </form>
         <p id="proxy-test-status" class="hint-text" role="status" aria-live="polite">Not tested. Tests use an HTTPS request to app.chitchat.gg through each proxy.</p>
         <p id="proxy-test-help" class="hint-text">Failures show the provider's own words plus a next step. Webshare: a status here with no username/password, or a username copied from a different Connection Method, is the usual cause of 402/407 — re-copy address, port, username and password from the same view in the Webshare dashboard.</p>
         <div id="proxy-test-results" aria-label="Proxy test results"></div>
+        <p id="proxy-target-status" class="hint-text" role="status" aria-live="polite">Direct check not run. Use it to prove whether the site or the proxy is at fault.</p>
+        <div id="proxy-target-results" aria-label="Direct site check results"></div>
       </section>
 
       <section class="tab-panel" data-panel="message">

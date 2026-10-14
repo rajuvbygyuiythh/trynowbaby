@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -25,6 +26,37 @@ type Relay struct {
 	once        sync.Once
 	cancel      context.CancelFunc
 	Entry       Entry
+	// lastFailure de-duplicates repeated upstream complaints so a browser that
+	// retries on every navigation cannot flood the log file.
+	lastFailure string
+}
+
+// reportFailure writes one credential-free line to stdout (captured into
+// logs.txt by the desktop build) the first time a given upstream problem
+// appears. Chrome only shows a generic error page, so without this the real
+// provider reason would be invisible.
+func (r *Relay) reportFailure(target string, err error) {
+	message := sanitizeProviderText(err.Error(), Entry{}, 240)
+	var tunnelErr *TunnelError
+	if errors.As(err, &tunnelErr) {
+		if tunnelErr.Status != 0 {
+			message = fmt.Sprintf("HTTP %d: %s", tunnelErr.Status, tunnelErr.Detail)
+		}
+		if tunnelErr.ProviderMessage != "" {
+			message += " | provider said: " + tunnelErr.ProviderMessage
+		}
+		if tunnelErr.ProxyAuth != "" {
+			message += " | auth challenge: " + tunnelErr.ProxyAuth
+		}
+	}
+	r.mu.Lock()
+	if r.lastFailure == message {
+		r.mu.Unlock()
+		return
+	}
+	r.lastFailure = message
+	r.mu.Unlock()
+	fmt.Printf("[proxy] upstream connection to %s failed — %s\n", target, message)
 }
 
 func StartRelay(parent context.Context, upstream Entry) (*Relay, error) {
@@ -57,6 +89,7 @@ func StartRelay(parent context.Context, upstream Entry) (*Relay, error) {
 			stripHopHeaders(forward.Header)
 			response, err := r.transport.RoundTrip(forward)
 			if err != nil {
+				r.reportFailure(req.URL.Host, err)
 				http.Error(w, "upstream proxy HTTP forwarding failed", 502)
 				return
 			}
@@ -75,6 +108,7 @@ func StartRelay(parent context.Context, upstream Entry) (*Relay, error) {
 		remote, err := upstream.DialTunnel(dialCtx, req.Host)
 		done()
 		if err != nil {
+			r.reportFailure(req.Host, err)
 			http.Error(w, err.Error(), 502)
 			return
 		}

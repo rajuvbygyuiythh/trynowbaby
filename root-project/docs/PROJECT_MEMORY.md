@@ -9,7 +9,7 @@ after every meaningful change** (newest last). Never rewrite old entries.
 <!-- AUTO:BEGIN -->
 _Auto status 2026-10-14. Do not edit this block by hand._
 
-- Source fingerprint: `d925500ebaaed804…`
+- Source fingerprint: `c8b755dc3b09695e…`
 - Browser options: `rod`, `chromedp`, `show_mode`
 - Capture tool: v1.2.1
 - Last verification: **BLOCKED** (PASS 5, FAIL 0, BLOCKED 8) — BLOCKED is not PASS; see `verification-output/report.json`
@@ -226,3 +226,25 @@ The full standard gate stays dependency-BLOCKED (badger's
 `golang.org/x/net`, `google.golang.org/protobuf`, `go.opentelemetry.io/otel`
 vanity paths are unreachable from this sandbox), and the owner's real
 proxy/Windows acceptance is still NOT_RUN. Behaviour docs: PROXY_TEST.md.
+
+## 2026-10-15 (later still) — multi-site NetDoctor toolset
+
+Owner: "we will work on many more sites, do not let small errors cost time."
+Change is additive and site-agnostic: new `internal/netdiag` (DNS→TCP→TLS→HTTP
+direct check with per-layer timing and one-line hint), new `netdoctor` CLI
+(`cmd/netdoctor` + `netdoctor.bat`) that tests any list of proxies against any
+list of targets with `-exitip`, `-json` and a plain-language VERDICT section,
+new `TestProxyEntriesFor`/`DiagnoseTarget` bindings and dashboard controls
+(test-site URL, opt-in exit IP + country + service URL, direct-site check, copy
+report that never copies the proxy list), and relay failures now surface the
+provider's own words into `logs.txt` once per distinct problem. `internal/proxy`
+gained `TestOptions`/`TestListWithOptions`, an opt-in exit-IP lookup
+(`exit_ip`, `exit_country`, `exit_ip_error`) and a shared `probe` path
+(HTTP and HTTPS targets, HEAD with no fallback, credentials never sent to the
+destination). Evidence: `go test -race` PASS for internal/proxy,
+internal/netdiag, cmd/netdoctor; `go vet` PASS; gofmt clean; Windows
+cross-compile of netdoctor PASS; 67 Node tests PASS; real local runs of the CLI
+show PASS/FAIL with layer timings (this sandbox blocks most HTTP egress, which
+the tool reports honestly instead of hiding). Full standard gate still
+dependency-BLOCKED; owner Windows/real-proxy acceptance NOT_RUN. Docs:
+NET_DOCTOR.md, PROXY_TEST.md. No chat/AI/worker/licence/store changes.

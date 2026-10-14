@@ -1,3 +1,40 @@
+## Latest handoff — multi-site NetDoctor toolset (2026-10-15)
+
+Owner: "we will work on many more sites, so do not let small errors cost time."
+Implemented (additive, site-agnostic, no chat/AI/worker/licence/store changes):
+
+- `internal/netdiag` — direct (no-proxy) check with per-layer timing
+  (DNS → TCP → TLS → HTTP), HEAD-with-GET-fallback, and a one-line hint that
+  names the failing layer.
+- `cmd/netdoctor` + `netdoctor.bat` — CLI that tests any proxy list against any
+  target list, with `-exitip`, `-json`, `-type http|socks5` and a VERDICT
+  section; exit codes 0 pass / 1 failure / 2 usage.
+- `internal/proxy` — `TestOptions` + `TestListWithOptions`, opt-in exit-IP and
+  country lookup (`exit_ip`/`exit_country`/`exit_ip_error`, one extra request,
+  never changes the verdict), shared `probe` used for HTTP and HTTPS targets.
+- Dashboard Proxy tab — Test site URL, exit-IP + country checkbox and service
+  URL, "Check site directly (no proxy)", "Copy report" (never copies the proxy
+  list), and exit-IP/country rendering; new bindings `TestProxyEntriesFor` and
+  `DiagnoseTarget` (the old `TestProxyEntries` still works).
+- Browser relay — the real upstream reason is printed once per distinct failure
+  to stdout → `logs.txt` ("[proxy] upstream connection to … failed — HTTP 402 …
+  | provider said: …"), credentials never printed.
+
+Evidence: `go test -race` PASS for internal/proxy, internal/netdiag,
+cmd/netdoctor; `go vet` PASS; gofmt clean; Windows-target cross-compile of
+netdoctor PASS; 67 Node tests PASS; real CLI runs show PASS/FAIL with layer
+timings (this sandbox blocks most HTTP egress and the tool reports that
+honestly). Full standard gate still dependency-BLOCKED (badger vanity imports);
+owner Windows/real-proxy acceptance NOT_RUN. Docs: root-project/docs/NET_DOCTOR.md
+(flags, decision table, limits) and PROXY_TEST.md. Source delivery:
+`root-project-netdoctor-UNVERIFIED.zip` — 201 entries, packaged with
+`node scripts/package-source.cjs --allow-unverified` and re-validated with
+`--check` ("Archive integrity PASS"); SHA256
+`50b4b74ea1895fde6b3b4c8f31c71da8bcf9d020beb7c9ac2fc65f41bd94ad4e`; the bundled
+report is BLOCKED with liveBrowser NOT_RUN, so the UNVERIFIED label stays.
+
+---
+
 ## Latest handoff — provider rejection diagnostics for Test Proxy (2026-10-15)
 
 Owner reported the dashboard proxy test failing with `HTTP proxy rejected CONNECT

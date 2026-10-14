@@ -19,6 +19,7 @@ import (
 	"chitchatbot/internal/bot"
 	"chitchatbot/internal/license"
 	"chitchatbot/internal/model"
+	"chitchatbot/internal/netdiag"
 	"chitchatbot/internal/proxy"
 	"chitchatbot/internal/store"
 	"chitchatbot/internal/uistore"
@@ -414,13 +415,41 @@ func (a *App) SaveMessageSettings(settings model.MessageSettings) error {
 
 // TestProxyEntries tests the current form without saving or exposing credentials.
 func (a *App) TestProxyEntries(raw string) ([]proxy.TestResult, error) {
+	return a.TestProxyEntriesFor(raw, "https://app.chitchat.gg/", false, "")
+}
+
+// TestProxyEntriesFor is the multi-site version of the proxy test: any http(s)
+// target can be tested, and each proxy can optionally report its public exit IP
+// so a site that needs a specific country is diagnosed before time is spent on
+// it. It saves nothing, opens no browser and never falls back to a direct call.
+func (a *App) TestProxyEntriesFor(raw string, endpoint string, checkExitIP bool, exitIPURL string) ([]proxy.TestResult, error) {
 	ctx := a.ctx
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(ctx, 65*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
-	return proxy.TestList(ctx, raw, "https://app.chitchat.gg/")
+	if strings.TrimSpace(endpoint) == "" {
+		endpoint = "https://app.chitchat.gg/"
+	}
+	return proxy.TestListWithOptions(ctx, raw, proxy.TestOptions{
+		Endpoint:    endpoint,
+		CheckExitIP: checkExitIP,
+		ExitIPURL:   exitIPURL,
+	})
+}
+
+// DiagnoseTarget checks any site directly, without a proxy, and reports which
+// layer failed (DNS, TCP, TLS, HTTP). Comparing this with the proxy results is
+// what separates "the site is blocking us" from "our side is broken".
+func (a *App) DiagnoseTarget(endpoint string) (netdiag.DirectResult, error) {
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	defer cancel()
+	return netdiag.Direct(ctx, endpoint), nil
 }
 
 func (a *App) SaveProxySettings(settings model.ProxySettings) error {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,7 +18,15 @@ import (
 	"time"
 )
 
-const MaxTestEntries = 20
+const (
+	MaxTestEntries = 20
+	// DefaultExitIPURL is the opt-in service used to learn the public exit IP
+	// behind a proxy. It is only contacted when the caller asks for it.
+	DefaultExitIPURL = "https://api.ipify.org/?format=json"
+	perProxyBudget   = 12 * time.Second
+	exitIPBudget     = 8 * time.Second
+	maxExitIPBody    = 4 << 10
+)
 
 type TestResult struct {
 	Line      int    `json:"line"`
@@ -35,6 +44,27 @@ type TestResult struct {
 	ProxyAuthenticate string `json:"proxy_authenticate,omitempty"`
 	// Authenticated reports whether the tested line carried a username/password.
 	Authenticated bool `json:"authenticated"`
+	// ExitIP/ExitCountry are only filled when CheckExitIP was requested; the
+	// public exit IP identifies the egress used for this line (useful when a
+	// target site needs a specific country).
+	ExitIP      string `json:"exit_ip,omitempty"`
+	ExitCountry string `json:"exit_country,omitempty"`
+	// ExitIPError explains why the optional exit-IP lookup did not produce a
+	// value. It never changes the PASS/FAIL verdict of the target test.
+	ExitIPError string `json:"exit_ip_error,omitempty"`
+}
+
+// TestOptions keeps the per-run knobs in one place so the dashboard and the
+// netdoctor CLI test proxies in exactly the same way.
+type TestOptions struct {
+	// Endpoint is any http(s) URL; https:// is the meaningful case.
+	Endpoint string
+	// CheckExitIP opts in to one extra request through each proxy.
+	CheckExitIP bool
+	// ExitIPURL defaults to DefaultExitIPURL.
+	ExitIPURL string
+	// MaxEntries defaults to MaxTestEntries.
+	MaxEntries int
 }
 
 // hintFor turns a failure into one plain-language next step. It never guesses
@@ -73,8 +103,28 @@ func hintFor(entry Entry, status int, snippet string, networkErr bool) string {
 // TestList never saves settings, rotates worker proxies or opens an account.
 // Only an HTTPS HEAD request to the supplied fixed public endpoint is made.
 func TestList(ctx context.Context, raw, endpoint string) ([]TestResult, error) {
+	return TestListWithOptions(ctx, raw, TestOptions{Endpoint: endpoint})
+}
+
+// TestListWithOptions is the shared implementation behind the dashboard button
+// and the netdoctor CLI: same parser, same check, same sanitized diagnostics.
+func TestListWithOptions(ctx context.Context, raw string, opts TestOptions) ([]TestResult, error) {
 	if len(raw) > 64<<10 {
 		return nil, fmt.Errorf("proxy list is too large (maximum 64 KiB)")
+	}
+	endpoint := strings.TrimSpace(opts.Endpoint)
+	if endpoint == "" {
+		endpoint = "https://app.chitchat.gg/"
+	}
+	if !isHTTPURL(endpoint) {
+		return nil, fmt.Errorf("test endpoint must be an http(s) URL")
+	}
+	if opts.CheckExitIP && strings.TrimSpace(opts.ExitIPURL) != "" && !isHTTPURL(opts.ExitIPURL) {
+		return nil, fmt.Errorf("exit-IP endpoint must be an http(s) URL")
+	}
+	limit := opts.MaxEntries
+	if limit <= 0 {
+		limit = MaxTestEntries
 	}
 	lines := strings.Split(strings.ReplaceAll(raw, "\r", ""), "\n")
 	results := make([]TestResult, 0)
@@ -83,8 +133,8 @@ func TestList(ctx context.Context, raw, endpoint string) ([]TestResult, error) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		if len(results) >= MaxTestEntries {
-			return nil, fmt.Errorf("test at most %d proxy lines at a time", MaxTestEntries)
+		if len(results) >= limit {
+			return nil, fmt.Errorf("test at most %d proxy lines at a time", limit)
 		}
 		entry, err := ParseLine(line)
 		result := TestResult{Line: index + 1}
@@ -109,8 +159,8 @@ func TestList(ctx context.Context, raw, endpoint string) ([]TestResult, error) {
 				if results[i].Detail != "" {
 					continue
 				}
-				c, cancel := context.WithTimeout(ctx, 12*time.Second)
-				tested := TestEndpoint(c, entries[i], endpoint)
+				c, cancel := context.WithTimeout(ctx, perProxyBudget)
+				tested := testEndpointFull(c, entries[i], endpoint, nil, opts)
 				cancel()
 				tested.Line = results[i].Line
 				results[i] = tested
@@ -124,32 +174,116 @@ func TestList(ctx context.Context, raw, endpoint string) ([]TestResult, error) {
 	wg.Wait()
 	return results, nil
 }
+
 func TestEndpoint(ctx context.Context, entry Entry, endpoint string) TestResult {
 	return testEndpoint(ctx, entry, endpoint, nil)
 }
 
 // Only local unit tests provide additional roots; dashboard uses system trust.
-func testEndpoint(ctx context.Context, entry Entry, endpoint string, roots *x509.CertPool) (result TestResult) {
+func testEndpoint(ctx context.Context, entry Entry, endpoint string, roots *x509.CertPool) TestResult {
+	return testEndpointFull(ctx, entry, endpoint, roots, TestOptions{})
+}
+
+func isHTTPURL(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	return err == nil && u.Hostname() != "" && (u.Scheme == "http" || u.Scheme == "https")
+}
+
+// probeResult is the raw outcome of one request through a proxy tunnel.
+type probeResult struct {
+	tunnel      bool // TCP + proxy handshake succeeded
+	tlsOK       bool
+	https       bool
+	status      int
+	body        []byte
+	detail      string
+	err         error
+	tlsRejected bool
+}
+
+// probe opens a fresh tunnel through this proxy for exactly one request. It
+// never falls back to a direct connection and never retries elsewhere.
+func (e Entry) probe(ctx context.Context, endpoint, method string, roots *x509.CertPool, maxBody int) probeResult {
+	result := probeResult{}
+	u, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		result.detail = "invalid test endpoint (needs an http(s) URL)"
+		return result
+	}
+	result.https = u.Scheme == "https"
+	port := u.Port()
+	if port == "" {
+		if result.https {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	conn, err := e.DialTunnel(ctx, net.JoinHostPort(u.Hostname(), port))
+	if err != nil {
+		result.detail = err.Error()
+		result.err = err
+		return result
+	}
+	defer conn.Close()
+	result.tunnel = true
+	var stream interface {
+		io.ReadWriter
+		SetDeadline(time.Time) error
+	} = conn
+	if result.https {
+		secure := tls.Client(conn, &tls.Config{ServerName: u.Hostname(), MinVersion: tls.VersionTLS12, RootCAs: roots})
+		if err := secure.HandshakeContext(ctx); err != nil {
+			result.detail = "proxy tunnel opened, but destination TLS verification/handshake failed"
+			result.tlsRejected = true
+			return result
+		}
+		result.tlsOK = true
+		stream = secure
+	}
+	deadline := time.Now().Add(perProxyBudget)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	stream.SetDeadline(deadline)
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, nil)
+	if err != nil {
+		result.detail = "invalid test request"
+		return result
+	}
+	req.Header.Set("User-Agent", "ChitChat-Proxy-Test/1.0")
+	req.Close = true
+	if err := req.Write(stream); err != nil {
+		result.detail = "tunnel/TLS succeeded; test request failed"
+		return result
+	}
+	response, err := http.ReadResponse(bufio.NewReader(io.LimitReader(stream, 64<<10)), req)
+	if err != nil {
+		result.detail = "tunnel/TLS succeeded; destination response failed or timed out"
+		return result
+	}
+	defer response.Body.Close()
+	result.status = response.StatusCode
+	if maxBody > 0 {
+		result.body, _ = io.ReadAll(io.LimitReader(response.Body, int64(maxBody)))
+	}
+	return result
+}
+
+func testEndpointFull(ctx context.Context, entry Entry, endpoint string, roots *x509.CertPool, opts TestOptions) (result TestResult) {
 	result.Label = entry.Label()
 	result.Authenticated = entry.HasAuth()
 	start := time.Now()
 	defer func() { result.LatencyMS = time.Since(start).Milliseconds() }()
-	u, err := url.Parse(endpoint)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" {
-		result.Detail = "invalid HTTPS test endpoint"
-		return
-	}
-	port := u.Port()
-	if port == "" {
-		port = "443"
-	}
-	conn, err := entry.DialTunnel(ctx, net.JoinHostPort(u.Hostname(), port))
-	if err != nil {
-		result.Detail = err.Error()
+
+	p := entry.probe(ctx, endpoint, http.MethodHead, roots, 0)
+	result.TunnelOK = p.tunnel && (!p.https || p.tlsOK)
+	if !p.tunnel {
+		result.Detail = p.detail
 		status := 0
 		networkErr := false
 		var tunnelErr *TunnelError
-		if errors.As(err, &tunnelErr) {
+		if errors.As(p.err, &tunnelErr) {
 			status = tunnelErr.Status
 			result.ProviderMessage = tunnelErr.ProviderMessage
 			result.ProxyAuthenticate = tunnelErr.ProxyAuth
@@ -157,45 +291,104 @@ func testEndpoint(ctx context.Context, entry Entry, endpoint string, roots *x509
 		}
 		result.Status = status
 		result.Hint = hintFor(entry, status, result.ProviderMessage, networkErr)
-		return
+		return result
 	}
-	defer conn.Close()
-	secure := tls.Client(conn, &tls.Config{ServerName: u.Hostname(), MinVersion: tls.VersionTLS12, RootCAs: roots})
-	if err := secure.HandshakeContext(ctx); err != nil {
-		result.Detail = "proxy tunnel opened, but destination TLS verification/handshake failed"
-		result.Hint = "The tunnel opened, so the credentials work. The HTTPS handshake failed: re-test in a moment, or the destination may be intercepted/blocked for this proxy."
-		return
+	if p.status == 0 {
+		result.Detail = p.detail
+		if p.tlsRejected {
+			result.Hint = "The tunnel opened, so the proxy credentials work. The HTTPS handshake failed: re-test in a moment, or the destination may be intercepted/blocked for this proxy."
+		}
+		return result
 	}
-	result.TunnelOK = true
-	deadline := time.Now().Add(12 * time.Second)
-	if d, ok := ctx.Deadline(); ok {
-		deadline = d
-	}
-	secure.SetDeadline(deadline)
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, endpoint, nil)
-	if err != nil {
-		result.Detail = "invalid test request"
-		return
-	}
-	req.Header.Set("User-Agent", "ChitChat-Proxy-Test/1.0")
-	req.Close = true
-	if err := req.Write(secure); err != nil {
-		result.Detail = "tunnel/TLS succeeded; test request failed"
-		return
-	}
-	response, err := http.ReadResponse(bufio.NewReader(io.LimitReader(secure, 64<<10)), req)
-	if err != nil {
-		result.Detail = "tunnel/TLS succeeded; destination response failed or timed out"
-		return
-	}
-	response.Body.Close()
-	result.Status = response.StatusCode
-	result.OK = response.StatusCode >= 200 && response.StatusCode < 400
+	result.Status = p.status
+	result.OK = p.status >= 200 && p.status < 400
 	if result.OK {
 		result.Detail = "PASS: proxy authentication, HTTPS tunnel and destination response succeeded"
 	} else {
-		result.Detail = fmt.Sprintf("proxy tunnel/TLS works, but destination returned HTTP %d (site/provider access restriction)", response.StatusCode)
-		result.Hint = hintFor(Entry{}, response.StatusCode, "", false)
+		result.Detail = fmt.Sprintf("proxy tunnel/TLS works, but destination returned HTTP %d (site/provider access restriction)", p.status)
+		result.Hint = hintFor(Entry{}, p.status, "", false)
 	}
-	return
+	if opts.CheckExitIP {
+		exitURL := strings.TrimSpace(opts.ExitIPURL)
+		if exitURL == "" {
+			exitURL = DefaultExitIPURL
+		}
+		result.ExitIP, result.ExitCountry, result.ExitIPError = entry.exitIP(ctx, exitURL, roots)
+	}
+	return result
+}
+
+// exitIP asks an external echo service, through this proxy only, which public
+// IP the connection egresses from. Used to confirm country/geo before spending
+// time on a target site.
+func (e Entry) exitIP(ctx context.Context, exitURL string, roots *x509.CertPool) (ip, country, detail string) {
+	child, cancel := context.WithTimeout(ctx, exitIPBudget)
+	defer cancel()
+	p := e.probe(child, exitURL, http.MethodGet, roots, maxExitIPBody)
+	if !p.tunnel || p.status == 0 {
+		return "", "", p.detail
+	}
+	if p.status < 200 || p.status >= 400 {
+		return "", "", fmt.Sprintf("exit-IP service returned HTTP %d", p.status)
+	}
+	ip, country = parseExitIPBody(p.body)
+	if ip == "" {
+		return "", "", "exit-IP service response did not contain an IP address"
+	}
+	return ip, country, ""
+}
+
+// parseExitIPBody accepts the common echo-service shapes: JSON with an ip-ish
+// field (optionally a country) or a plain-text body containing the IP.
+func parseExitIPBody(body []byte) (ip, country string) {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return "", ""
+	}
+	if strings.HasPrefix(trimmed, "{") {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(trimmed), &payload); err == nil {
+			for key, value := range payload {
+				text, ok := value.(string)
+				if !ok {
+					continue
+				}
+				switch strings.ToLower(key) {
+				case "ip", "ipv4", "query", "ip_address", "origin":
+					if ip == "" {
+						if candidate := firstIP(strings.FieldsFunc(text, func(r rune) bool { return r == ',' || r == ' ' })); candidate != "" {
+							ip = candidate
+						}
+					}
+				case "country", "country_code", "countrycode", "country_name":
+					if country == "" {
+						country = sanitizeProviderText(text, Entry{}, 32)
+					}
+				}
+			}
+		}
+	}
+	if ip == "" {
+		ip = firstIP(strings.FieldsFunc(trimmed, func(r rune) bool {
+			return r == ',' || r == '\n' || r == '\r' || r == '\t' || r == ' '
+		}))
+	}
+	if ip == "" {
+		return "", ""
+	}
+	return ip, country
+}
+
+func firstIP(fields []string) string {
+	for _, field := range fields {
+		// Accept both "1.2.3.4" and "ip=1.2.3.4" style plain-text echoes.
+		if index := strings.LastIndex(field, "="); index >= 0 {
+			field = field[index+1:]
+		}
+		candidate := strings.Trim(field, "\"'[]{}:,")
+		if net.ParseIP(candidate) != nil {
+			return candidate
+		}
+	}
+	return ""
 }

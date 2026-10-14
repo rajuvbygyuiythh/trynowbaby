@@ -110,7 +110,9 @@ function main() {
         "internal/proxy/proxy.go", "internal/proxy/connect.go",
         "internal/proxy/relay.go", "internal/proxy/testproxy.go",
         "internal/proxy/proxy_test.go", "internal/proxy/relay_test.go",
-        "internal/proxy/diagnostics_test.go",
+        "internal/proxy/diagnostics_test.go", "internal/proxy/exitip_test.go",
+        "internal/netdiag/netdiag.go", "internal/netdiag/netdiag_test.go",
+        "cmd/netdoctor/main.go", "cmd/netdoctor/main_test.go",
       ],
       { emptyOutput: true },
     );
@@ -128,6 +130,8 @@ function main() {
         "./internal/workerplan",
         "./internal/runtimeassets",
         "./internal/proxy",
+        "./internal/netdiag",
+        "./cmd/netdoctor",
         "./internal/store",
         "./internal/api",
       ];

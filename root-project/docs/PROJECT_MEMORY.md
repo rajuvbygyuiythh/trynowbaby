@@ -9,10 +9,10 @@ after every meaningful change** (newest last). Never rewrite old entries.
 <!-- AUTO:BEGIN -->
 _Auto status 2026-10-14. Do not edit this block by hand._
 
-- Source fingerprint: `499c8f1b31ee897f…`
+- Source fingerprint: `00b6e1611785cfa9…`
 - Browser options: `rod`, `chromedp`, `show_mode`
 - Capture tool: v1.2.1
-- Last verification: **BLOCKED** (PASS 5, FAIL 0, BLOCKED 8) — BLOCKED is not PASS; see `verification-output/report.json`
+- Last verification: no report found yet (`npm run verify`)
 <!-- AUTO:END -->
 
 ## Decision log
@@ -108,6 +108,45 @@ _Auto status 2026-10-14. Do not edit this block by hand._
   revive the WebSocket/API route for Show Mode.
 
 - 2026-10-14 — Owner authorized targeted Show Mode incoming-message fix. Replaced clock/name guessing with an embedded exact-selector DOM observer, stable row IDs, grouped-author parsing, safe self/partner classification, serial queue and native Rod input/Enter confirmation. Generation checks prevent stale reply/skip; uncertain sends pause without automatic retry. Only domchat.go, new showmode_dom.js and live_chat.go are production changes; local live adapter renders configured handles and applies the existing EVA no-username gate without changing worker/AI core. Tests/wiring/docs updated; all other original files byte-compared against the original ZIP. New Node suite 52 PASS; isolated production-runner/Rod-boundary Go race tests/vet and Windows-target test compilation PASS, not full-app verification. Full standard gate BLOCKED by dependency proxy EOF; Windows live/site NOT_RUN. See SHOW_MODE_FIX.md. Source is now actually extracted under root-project/ in this repository; original ZIP unchanged, new download remains UNVERIFIED.
+
+- 2026-10-14 — Owner reports the delivered Show Mode v2 works fully in their
+  Windows retest (user report, not a sandbox live run). Keep that chat/browser
+  implementation untouched. Next authorized scope: Home logs only. All App.log
+  levels now append to `logs.txt` beside the active `data/` directory, independent
+  of Badger/UI persistence; main routes Go and emitted Wails diagnostics there.
+  Home log rows/rendering removed; counters/actions and Browser status events
+  preserved. Frontend backend-call failures/uncaught errors use the existing Wails
+  logging bridge without serializing request/settings arguments. Text file uses
+  UTF-8 JSON lines with UTC time, level, source and untruncated message; appends
+  across sessions and survives Clear Logs/Clean. No automatic rotation/truncation.
+  Known credential forms are masked; review personal chat data before sharing.
+  Disk-full/permission failures are reported to stderr (cannot promise a file
+  write when the OS refuses it); Wails' existing framework log-level filtering
+  is unchanged. Go logger tests/race/vet and Windows-target test compilation PASS;
+  Node suite 57 PASS. Real root App/Badger tests and full desktop verification
+  remain dependency-blocked; Windows runtime retest of this logging change is
+  NOT_RUN. No chat/worker/driver/license/model/DB schema/binding changes. Added
+  runtime logs.txt Git/source-package exclusion and scoped regression coverage.
+  No new ZIP or remote push was requested for this step; previous working ZIP
+  stays unchanged.
+
+- 2026-10-15 — Owner requested restore of the working project and completion
+  of Home file logging after audit found missing frontend assets and uncaptured
+  driver stdout. Restored all missing UI assets from the owner-tested v2 ZIP;
+  styles, Show Mode/browser/worker/license/proxy/model/store/lockfiles remain
+  unchanged. Reapplied only Home log removal and frontend error forwarding.
+  Desktop-only stdout/stderr capture now retains printed driver diagnostics,
+  drains partial/long lines at normal shutdown and uses original stderr on disk
+  errors (no recursion). Go SetCrashOutput appends unhandled goroutine panic/
+  fatal runtime stack text directly to logs.txt; ordinary records remain JSON
+  lines, so crash files may mix JSON lines and plain text. Known-token redaction
+  applies to ordinary records, not raw runtime crash dumps; review before sharing.
+  Wails INFO/WARNING/ERROR enabled, raw RPC DEBUG/TRACE deliberately not enabled.
+  58 Node tests PASS; 13 actual Go logger race tests and vet PASS; Windows-target
+  logger tests compile only. Full standard gate dependency-BLOCKED; root App/
+  Badger and native Windows logging test NOT_RUN. See FILE_LOGGING.md. A separate
+  UNVERIFIED source archive preserves all frontend files; previous working ZIPs
+  kept unchanged. No remote push or main merge implied.
 
 ## Known limitations (keep honest)
 

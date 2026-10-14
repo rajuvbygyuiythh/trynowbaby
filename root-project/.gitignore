@@ -12,6 +12,7 @@ release/
 .vscode/
 .idea/
 *.log
+logs.txt
 *.zip
 .DS_Store
 Thumbs.db

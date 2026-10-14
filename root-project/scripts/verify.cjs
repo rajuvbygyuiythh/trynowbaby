@@ -100,7 +100,12 @@ function main() {
     run(
       "changed-go-format",
       fmt,
-      ["-l", "app.go", "browser_run_test.go", "browser_lifecycle_test.go"],
+      [
+        "-l", "app.go", "main.go", "app_logging_test.go",
+        "internal/applog/applog.go", "internal/applog/applog_test.go",
+        "internal/applog/capture.go", "internal/applog/capture_test.go",
+        "browser_run_test.go", "browser_lifecycle_test.go",
+      ],
       { emptyOutput: true },
     );
     const dependencies = run("go-dependencies", go, ["mod", "download"], {
@@ -109,6 +114,7 @@ function main() {
     if (dependencies) {
       run("module-checksums", go, ["mod", "verify"]);
       const regression = [
+        "./internal/applog",
         "./internal/bot",
         "./internal/browser",
         "./internal/model",

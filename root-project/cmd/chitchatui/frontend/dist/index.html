@@ -49,12 +49,12 @@
         <header class="panel-header">
           <div>
             <h1>Home</h1>
-            <p>Start the bot and watch the live log stream.</p>
+            <p>Activity and errors are saved to logs.txt beside the data folder.</p>
           </div>
           <div class="actions">
             <button id="clean-profiles" class="secondary-button">Clean</button>
             <button id="refresh-state" class="secondary-button">Refresh</button>
-            <button id="clear-logs" class="secondary-button">Clear Logs</button>
+            <button id="clear-logs" class="secondary-button" title="Clear stored UI history only; logs.txt is kept.">Clear Logs</button>
             <button id="stop-bot" class="secondary-button">Stop</button>
             <button id="start-bot" class="primary-button">Start Bot</button>
           </div>
@@ -99,7 +99,6 @@
           </div>
         </div>
 
-        <div id="log-list" class="log-list"></div>
       </section>
 
       <section class="tab-panel" data-panel="proxy">

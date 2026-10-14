@@ -32,7 +32,7 @@ function excluded(rel) {
     parts[0] === "dist" ||
     /\.(zip|exe|dll|cab|msi|syso|log|sst|vlog|pem|key|pfx|p12)$/i.test(name) ||
     /^\.env(?:\.|$)/.test(name) ||
-    [".netrc", ".git-credentials"].includes(name) ||
+    [".netrc", ".git-credentials", "logs.txt"].includes(name) ||
     /^(login_info.*\.json|storage_state\.json)$/i.test(name)
   );
 }

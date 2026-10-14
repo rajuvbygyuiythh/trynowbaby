@@ -10,6 +10,8 @@ const { validateArchive } = require("../scripts/package-source.cjs");
 test("source inventory excludes runtime/private/build data but keeps embedded UI", () => {
   for (const p of [
     "data/profiles/a.json",
+    "logs.txt",
+    "nested/LOGS.TXT",
     "nested/data/a.json",
     "node_modules/a.js",
     "build/a.exe",

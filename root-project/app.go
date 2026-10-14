@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"chitchatbot/internal/applog"
 	"chitchatbot/internal/browser"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -1116,8 +1117,13 @@ func (a *App) emit(name string, data any) {
 }
 
 func (a *App) log(level string, message string) {
+	// Persist first, independently of Badger/UI events; no Home visibility filter.
+	disk := applog.Logger{Path: applog.Path(a.dataDir), Source: "app"}
+	disk.Log(level, message)
 	entry, err := a.uiStore.AppendLog(level, message)
 	if err == nil {
-		a.emit("ui:log", entry)
+		a.emit("ui:log", entry) // Browser status still consumes this event.
+	} else {
+		disk.Error(fmt.Sprintf("UI log persistence failed: %v", err))
 	}
 }

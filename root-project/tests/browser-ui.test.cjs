@@ -141,3 +141,56 @@ test('Show Mode always requests a visible browser without changing the Headless 
   assert.equal(calls[1][0].headless,true);
   dom.window.close();
 });
+
+test('Home has no log stream; snapshots/events cannot recreate it or break browser status', async () => {
+  const events={};
+  const {dom,w,d,options}=setup({GetInitialState:async()=>({browser:{profile:'saved',headless:false,backend:'rod'},browser_options:options,message:{sequence:'a\nb'},proxy:{},general:{},home:{},logs:[{level:'activity',message:'old private activity'}]})});
+  try {
+    w.runtime={EventsOn:(name,fn)=>events[name]=fn};w.bindEvents();
+    await w.refreshState();
+    assert.equal(d.querySelector('#log-list, .log-entry'),null);
+    assert.doesNotMatch(d.querySelector('[data-panel="home"]').textContent,/old private activity|Showing bot logs/);
+    assert.match(d.querySelector('[data-panel="home"]').textContent,/logs\.txt/);
+    for(const level of ['activity','error','info']) events['ui:log']({level,message:'[default fresh 1/1] Browser diagnostic'});
+    assert.equal(d.querySelector('#log-list, .log-entry'),null);
+    assert.match(d.querySelector('#browser-status').textContent,/Browser diagnostic/);
+    for(const id of ['clean-profiles','refresh-state','clear-logs','stop-bot','start-bot','stat-bot-accounts','stat-running-accounts','stat-messages-sent']) assert.ok(d.getElementById(id));
+  } finally {dom.window.close();}
+});
+
+test('backend failures are forwarded to file logger via Wails without settings arguments', async () => {
+  const {dom,w}=setup({RunBrowser:async()=>{throw new Error('synthetic backend failure');}});
+  const messages=[];w.runtime={LogError:message=>messages.push(message)};
+  try {
+    await assert.rejects(w.invoke('RunBrowser',{password:'DO_NOT_LOG_ARGUMENTS'}),/synthetic backend failure/);
+    assert.equal(messages.length,1);assert.match(messages[0],/Backend RunBrowser failed.*synthetic backend failure/s);
+    assert.doesNotMatch(messages[0],/DO_NOT_LOG_ARGUMENTS/);
+    w.runtime.LogError=()=>{throw new Error('logging bridge unavailable');};
+    await assert.rejects(w.invoke('RunBrowser',{}),/synthetic backend failure/);
+  } finally {dom.window.close();}
+});
+
+test('Clear Logs still clears only legacy UI history and preserves Home controls', async () => {
+  let cleared=0;
+  const {dom,w,d,options}=setup({ClearLogs:async()=>cleared++,GetInitialState:async()=>({browser:{},browser_options:options,message:{},proxy:{},general:{},home:{},logs:[]})});
+  try {
+    w.bindActions();d.getElementById('clear-logs').click();
+    await new Promise(r=>setImmediate(r));assert.equal(cleared,1);
+    assert.match(d.getElementById('clear-logs').title,/logs\.txt is kept/);
+    assert.equal(d.querySelector('#log-list'),null);
+  } finally {dom.window.close();}
+});
+
+test('uncaught frontend errors and rejected promises are forwarded without rendering Home logs', () => {
+  const {dom,w,d}=setup();const listeners={},messages=[];
+  try {
+    w.addEventListener=(name,fn)=>listeners[name]=fn;
+    w.eval(fs.readFileSync(path.join(assets,'app.js'),'utf8').replace('const state = {','var state = {'));
+    w.runtime={LogError:message=>messages.push(message)};
+    listeners.error({error:new Error('synthetic JS failure')});
+    listeners.unhandledrejection({reason:'synthetic rejected promise'});
+    assert.equal(messages.length,2);assert.match(messages[0],/Uncaught error.*synthetic JS failure/s);
+    assert.match(messages[1],/Unhandled promise rejection.*synthetic rejected promise/s);
+    assert.equal(d.querySelector('#log-list, .log-entry'),null);
+  } finally {dom.window.close();}
+});

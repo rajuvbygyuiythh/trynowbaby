@@ -36,3 +36,23 @@ test('advertised drivers match factory and Show Mode resolves to visible Rod',()
 test('live browser integration test is opt-in, never part of the default suite',()=>{
  assert.ok(read('internal/browser/rod_proxy_auth_test.go').startsWith('//go:build browser_live\n'));
 });
+
+test('desktop startup records logs before UI startup even without a GUI console',()=>{
+ const main=read('main.go');
+ assert.match(main,/log\.SetOutput\(io\.MultiWriter\(applog\.Logger\{[^}]+\}, os\.Stderr\)\)/);
+ assert.ok(main.indexOf('log.SetOutput(')<main.indexOf('NewApp(dataDir)'));
+ assert.match(main,/Logger:\s+diskLogger/);
+ const logFn=go.slice(go.indexOf('func (a *App) log('));
+ assert.ok(logFn.indexOf('disk.Log(level, message)')<logFn.indexOf('a.uiStore.AppendLog(level, message)'));
+ assert.match(logFn,/disk.Error\(fmt.Sprintf\("UI log persistence failed/);
+});
+
+test('process capture and fatal crash hook are installed only at desktop startup',()=>{
+ const main=read('main.go'),capture=read('internal/applog/capture.go');
+ assert.ok(main.indexOf('applog.CaptureOutput(')<main.indexOf('NewApp(dataDir)'));
+ assert.match(main,/capture.Close\(\)/);
+ assert.match(capture,/debug.SetCrashOutput\(crash, debug.CrashOptions\{\}\)/);
+ assert.match(capture,/os.Stdout = outWrite/);
+ assert.match(capture,/os.Stderr = errWrite/);
+ assert.match(main,/LogLevelProduction:\s*logger.INFO/);
+});

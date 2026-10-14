@@ -11,15 +11,31 @@ function backend() {
 }
 
 async function invoke(method, ...args) {
-  const api = backend();
-  if (!api || typeof api[method] !== "function") {
-    throw new Error(`Wails binding not ready: ${method}`);
+  try {
+    const api = backend();
+    if (!api || typeof api[method] !== "function") {
+      throw new Error(`Wails binding not ready: ${method}`);
+    }
+    return await api[method](...args);
+  } catch (error) {
+    reportFrontendError(`Backend ${method} failed`, error);
+    throw error;
   }
-  return api[method](...args);
 }
 
 function runtimeEvents() {
   return window.runtime || {};
+}
+
+// Never serialize backend arguments: settings can contain credentials.
+function reportFrontendError(context, error) {
+  try {
+    const runtime = runtimeEvents();
+    if (typeof runtime.LogError === "function") {
+      const detail = error && error.stack ? error.stack : String(error);
+      runtime.LogError(`Frontend | ${context} | ${detail}`);
+    }
+  } catch (_) { /* Do not recurse when the logging bridge is unavailable. */ }
 }
 
 function setRunning(running) {
@@ -31,50 +47,6 @@ function setRunning(running) {
     cleanButton.disabled = !!running;
     cleanButton.title = running ? "Stop the bot before cleaning profile data." : "";
   }
-}
-
-function renderLogs(logs) {
-  const logList = document.getElementById("log-list");
-  logList.innerHTML = "";
-  const visibleLogs = (logs || []).filter(isVisibleHomeLog);
-
-  if (!visibleLogs.length) {
-    const empty = document.createElement("div");
-    empty.className = "log-entry";
-    empty.innerHTML = `<div class="log-time">-</div><div class="log-level activity">ACTIVITY</div><div class="log-message">No chat activity yet.</div>`;
-    logList.appendChild(empty);
-    return;
-  }
-
-  visibleLogs.forEach((entry) => appendLog(entry, false));
-  logList.scrollTop = logList.scrollHeight;
-}
-
-function appendLog(entry, scroll = true) {
-  if (!isVisibleHomeLog(entry)) {
-    return;
-  }
-
-  const logList = document.getElementById("log-list");
-  const row = document.createElement("div");
-  row.className = "log-entry";
-
-  const level = String(entry.level || "info").toLowerCase();
-  row.innerHTML = `
-    <div class="log-time">${escapeHtml(entry.time || "")}</div>
-    <div class="log-level ${level}">${escapeHtml(level)}</div>
-    <div class="log-message">${escapeHtml(entry.message || "")}</div>
-  `;
-
-  logList.insertBefore(row, logList.firstChild);
-  if (scroll) {
-    logList.scrollTop = 0;
-  }
-}
-
-function isVisibleHomeLog(entry) {
-  const level = String(entry && entry.level ? entry.level : "info").toLowerCase();
-  return level === "activity";
 }
 
 function browserStatus(message, isError = false) {
@@ -225,7 +197,7 @@ function fillForms(snapshot) {
     .map((line) => line.trim())
     .filter(Boolean).length;
   document.getElementById("home-summary").textContent =
-    `Showing bot logs | Backend: ${snapshot.browser.backend} | Profiles auto-start | Message steps: ${messageLineCount}`;
+    `Backend: ${snapshot.browser.backend} | Profiles auto-start | Message steps: ${messageLineCount}`;
 }
 
 function escapeHtml(value) {
@@ -241,7 +213,6 @@ async function refreshState() {
   const snapshot = await invoke("GetInitialState");
   state.snapshot = snapshot;
   fillForms(snapshot);
-  renderLogs(snapshot.logs || []);
 }
 
 async function autoRefreshStats() {
@@ -430,7 +401,6 @@ function bindEvents() {
 
   if (typeof runtime.EventsOn === "function") {
     runtime.EventsOn("ui:log", (entry) => {
-      appendLog(entry);
       if (typeof entry.message === "string" && /\[[^\]]+ fresh \d+\/\d+\]/.test(entry.message)
           && !entry.message.includes("] Removed temporary browser data from ")) {
         state.browserActivityVersion += 1;
@@ -439,9 +409,6 @@ function bindEvents() {
     });
     runtime.EventsOn("ui:running", (running) => {
       setRunning(!!running);
-    });
-    runtime.EventsOn("ui:logs_cleared", () => {
-      renderLogs([]);
     });
     runtime.EventsOn("ui:license_invalid", (data) => {
       document.querySelector('.shell').classList.remove('visible');
@@ -489,8 +456,16 @@ async function bootstrap() {
   document.getElementById("home-summary").textContent = "Failed to connect to Wails bindings.";
 }
 
+window.addEventListener("error", (event) => {
+  reportFrontendError("Uncaught error", event.error || event.message);
+});
+window.addEventListener("unhandledrejection", (event) => {
+  reportFrontendError("Unhandled promise rejection", event.reason);
+});
+
 window.addEventListener("DOMContentLoaded", () => {
   bootstrap().catch((error) => {
+    reportFrontendError("Bootstrap failed", error);
     document.getElementById("home-summary").textContent = error.message || String(error);
   });
 });

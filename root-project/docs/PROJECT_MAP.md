@@ -12,22 +12,23 @@ _Auto-generated 2026-10-14 by `scripts/project-map.cjs`. Do not edit this block 
 
 ## Source inventory
 
-- Total source files: **168** (926.0 KiB, excluding runtime/private data)
+- Total source files: **174** (956.1 KiB, excluding runtime/private data)
 
 | Area | Files | Size |
 |---|---:|---:|
-| `internal/` | 78 | 382.2 KiB |
+| `internal/` | 82 | 399.7 KiB |
 | `capture/` | 25 | 114.1 KiB |
-| `(root files)` | 21 | 137.5 KiB |
+| `(root files)` | 22 | 140.8 KiB |
 | `apitest/` | 12 | 99.3 KiB |
-| `cmd/` | 9 | 74.0 KiB |
-| `docs/` | 8 | 47.5 KiB |
-| `scripts/` | 8 | 39.0 KiB |
-| `tests/` | 7 | 32.4 KiB |
+| `cmd/` | 9 | 73.4 KiB |
+| `docs/` | 9 | 52.7 KiB |
+| `scripts/` | 8 | 39.2 KiB |
+| `tests/` | 7 | 36.9 KiB |
 
 ## Internal Go packages
 
 - `internal/api/` — 1 Go file(s)
+- `internal/applog/` — 4 Go file(s)
 - `internal/bot/` — 21 Go file(s)
 - `internal/browser/` — 9 Go file(s)
 - `internal/license/` — 1 Go file(s)
@@ -60,6 +61,7 @@ _Auto-generated 2026-10-14 by `scripts/project-map.cjs`. Do not edit this block 
 - `docs/CHAT_ENGINE_MAPPING.md`
 - `docs/CHITCHAT_PROTOCOL.md`
 - `docs/DEBUG_CLEANUP.md`
+- `docs/FILE_LOGGING.md`
 - `docs/PROJECT_MAP.md`
 - `docs/PROJECT_MEMORY.md`
 - `docs/SHOW_MODE.md`

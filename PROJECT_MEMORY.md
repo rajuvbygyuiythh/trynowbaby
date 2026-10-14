@@ -1,3 +1,19 @@
+## Latest handoff — Home file logging (2026-10-15)
+
+Owner confirmed Show Mode v2 works on Windows. That chat/browser implementation
+is unchanged. Missing frontend assets were restored from its working source ZIP.
+The subsequent Home logging task is now implemented in editable source: no Home
+log rows; normal diagnostics append to logs.txt beside data/; desktop stdout/
+stderr are captured and Go fatal runtime stack output appends directly to that
+file. Read root-project/docs/FILE_LOGGING.md and project decision memory for the
+exact scope, tests and raw-crash privacy caveat. New full-source download:
+root-project-home-file-logs-UNVERIFIED.zip. Old working archives remain intact.
+58 Node tests and 13 actual Go logger/race tests plus logger vet PASS; full
+standard gate remains dependency-BLOCKED, native Windows retest NOT_RUN.
+No remote publication of this new change has been performed.
+
+---
+
 # Project memory — trynowbaby / ChitChat Bot
 
 ## Current update — targeted Show Mode fix (2026-10-14)

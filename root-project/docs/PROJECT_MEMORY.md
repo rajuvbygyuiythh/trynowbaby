@@ -248,3 +248,23 @@ show PASS/FAIL with layer timings (this sandbox blocks most HTTP egress, which
 the tool reports honestly instead of hiding). Full standard gate still
 dependency-BLOCKED; owner Windows/real-proxy acceptance NOT_RUN. Docs:
 NET_DOCTOR.md, PROXY_TEST.md. No chat/AI/worker/licence/store changes.
+
+## 2026-10-16 — Account warning for off-platform redirection (compliance review)
+
+Owner's account received Account standing → **Warning**, *Off-platform
+redirection*, with chatting paused until an account is linked (Apple/Google).
+Reviewed against the platform's published guidelines (fetched 2026-10-16;
+last updated 2026-09-09) plus our own source and the owner's transcript
+screenshots. Finding: the flag is **content- and report-based**, not
+network/fingerprint-based, and the product does exactly what the guidelines
+publish as a violation — `ask_snap` → `share_snap` → `snapchat` redirection
+pool plus AI prompts that steer to Snap ("so telgm", "add me wewqq78" in the
+owner's own transcript). `evaAIForbidden` only blocks literal
+telegram/t.me/whatsapp/@/http, so misspellings ("telgm", "sc", "snp", "tg")
+reach users. Consequences recorded honestly: proxies/fingerprints/timing cannot
+change an account-level moderation record, and this repository will not build or
+document detection-evasion or ban-evasion tooling. Two sustainable paths are
+documented in `docs/POLICY_COMPLIANCE.md`: (A) remove the off-platform funnel
+(EVA stages, snap pools, AI funnel prompts) and stop same-message bulk sending,
+keeping a compliant chat engine; (B) keep the funnel off platforms that forbid
+it. No product code changed in this step; owner decision pending.

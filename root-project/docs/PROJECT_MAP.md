@@ -12,24 +12,24 @@ _Auto-generated 2026-10-14 by `scripts/project-map.cjs`. Do not edit this block 
 
 ## Source inventory
 
-- Total source files: **163** (903.2 KiB, excluding runtime/private data)
+- Total source files: **168** (926.0 KiB, excluding runtime/private data)
 
 | Area | Files | Size |
 |---|---:|---:|
-| `internal/` | 76 | 379.1 KiB |
+| `internal/` | 78 | 382.2 KiB |
 | `capture/` | 25 | 114.1 KiB |
-| `(root files)` | 21 | 133.5 KiB |
+| `(root files)` | 21 | 137.5 KiB |
 | `apitest/` | 12 | 99.3 KiB |
 | `cmd/` | 9 | 74.0 KiB |
-| `scripts/` | 8 | 38.9 KiB |
-| `docs/` | 7 | 41.5 KiB |
-| `tests/` | 5 | 22.9 KiB |
+| `docs/` | 8 | 47.5 KiB |
+| `scripts/` | 8 | 39.0 KiB |
+| `tests/` | 7 | 32.4 KiB |
 
 ## Internal Go packages
 
 - `internal/api/` — 1 Go file(s)
 - `internal/bot/` — 21 Go file(s)
-- `internal/browser/` — 8 Go file(s)
+- `internal/browser/` — 9 Go file(s)
 - `internal/license/` — 1 Go file(s)
 - `internal/model/` — 2 Go file(s)
 - `internal/proxy/` — 1 Go file(s)
@@ -63,6 +63,7 @@ _Auto-generated 2026-10-14 by `scripts/project-map.cjs`. Do not edit this block 
 - `docs/PROJECT_MAP.md`
 - `docs/PROJECT_MEMORY.md`
 - `docs/SHOW_MODE.md`
+- `docs/SHOW_MODE_FIX.md`
 - `docs/VERIFICATION.md`
 - `AGENTS.md` — locked scope and hard rules (read first)
 - `START-HERE.md` — packaging/testing entry guide

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -15,11 +16,17 @@ import (
 // scripted page. No browser is launched: rows and controls are faked, typing
 // is recorded, and sends echo back as own rows just like the real page.
 type fakeDOMBackend struct {
-	mu       sync.Mutex
-	controls browser.DOMControls
-	rows     []browser.DOMMessage
-	sent     []string
-	clicks   []string
+	mu          sync.Mutex
+	controls    browser.DOMControls
+	rows        []browser.DOMMessage
+	sent        []string
+	clicks      []string
+	serial      int
+	generation  int
+	lastPhase   string
+	lastPartner string
+	failSend    bool
+	sendHook    func()
 }
 
 func (f *fakeDOMBackend) Name() string { return "rod" }
@@ -34,23 +41,48 @@ func (f *fakeDOMBackend) Fetch(context.Context, browser.FetchRequest) (browser.F
 }
 func (f *fakeDOMBackend) Close() error { return nil }
 
-func (f *fakeDOMBackend) DOMControls(context.Context) (browser.DOMControls, error) {
+func (f *fakeDOMBackend) ReadDOMSnapshot(context.Context) (browser.DOMSnapshot, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.controls, nil
-}
-
-func (f *fakeDOMBackend) ExtractDOMMessages(context.Context) ([]browser.DOMMessage, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]browser.DOMMessage(nil), f.rows...), nil
+	c := f.controls
+	if c.Phase == "" {
+		if c.HasInput && !c.ChatEnded {
+			c.Phase = "chatting"
+		} else {
+			c.Phase = "lobby"
+		}
+	}
+	if c.Partner == "" {
+		c.Partner = "partner"
+	}
+	if c.OwnName == "" {
+		c.OwnName = "me"
+	}
+	if c.Phase != f.lastPhase || c.Partner != f.lastPartner {
+		f.generation++
+		f.lastPhase = c.Phase
+		f.lastPartner = c.Partner
+	}
+	if c.Conversation == "" {
+		c.Conversation = fmt.Sprintf("fake-%d", f.generation)
+	}
+	c.CanSend = c.Phase == "chatting"
+	c.ObserverReady = true
+	return browser.DOMSnapshot{Controls: c, Messages: append([]browser.DOMMessage(nil), f.rows...)}, nil
 }
 
 func (f *fakeDOMBackend) SendDOMMessage(_ context.Context, text string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, text)
-	f.rows = append(f.rows, browser.DOMMessage{Author: "me", Text: text})
+	if f.sendHook != nil {
+		f.sendHook()
+	}
+	if f.failSend {
+		return false, nil
+	}
+	f.serial++
+	f.rows = append(f.rows, browser.DOMMessage{ID: fmt.Sprintf("own-%d", f.serial), Author: "me", Text: text})
 	return true, nil
 }
 
@@ -87,7 +119,8 @@ func (f *fakeDOMBackend) ClickDOMButton(_ context.Context, labels []string) (str
 func (f *fakeDOMBackend) addRow(author, text string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.rows = append(f.rows, browser.DOMMessage{Author: author, Text: text})
+	f.serial++
+	f.rows = append(f.rows, browser.DOMMessage{ID: fmt.Sprintf("row-%d", f.serial), Author: author, Text: text})
 }
 
 func (f *fakeDOMBackend) sentCount(text string) int {
@@ -139,9 +172,6 @@ func testLiveRunner(a *App, fake *fakeDOMBackend) *liveRunner {
 		logf:         func(string, string) {},
 		replyDelay:   time.Millisecond,
 		pollInterval: 20 * time.Millisecond,
-		seenCounts:   make(map[string]int),
-		sentEcho:     make(map[string]int),
-		echoAuthors:  make(map[string]int),
 		newResponder: a.newLiveResponder,
 	}
 }
@@ -229,5 +259,156 @@ func TestLiveChatEVAResponderStarts(t *testing.T) {
 	}
 	if lines := responder.Start(); len(lines) == 0 {
 		t.Fatal("EVA Start should produce a greeting line from the starter pack")
+	}
+}
+
+func TestShowModeRepeatedTextOwnEchoAndUnknownAuthor(t *testing.T) {
+	a := browserTestApp(t)
+	if err := a.SaveMessageSettings(model.NewMessageSettings("opener\nreply1\nreply2\nreply3", "")); err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeDOMBackend{controls: browser.DOMControls{HasInput: true, Buttons: []string{"SKIP"}}}
+	r := testLiveRunner(a, f)
+	ctx := context.Background()
+	r.step(ctx)
+	f.addRow("partner", "opener") // identical to our greeting, but NOT our echo
+	f.addRow("partner", "opener") // identical text, different stable IDs
+	f.addRow("", "unclassified")
+	r.step(ctx)
+	r.step(ctx)
+	r.step(ctx)
+	if f.sentCount("reply1") != 1 || f.sentCount("reply2") != 1 || f.totalSent() != 3 {
+		t.Fatalf("bad queue/echo handling: %v", f.sent)
+	}
+	// A late author resolution must not lose that unread message.
+	f.mu.Lock()
+	for i := range f.rows {
+		if f.rows[i].Author == "" {
+			f.rows[i].Author = "partner"
+		}
+	}
+	f.mu.Unlock()
+	r.step(ctx)
+	if f.sentCount("reply3") != 1 {
+		t.Fatal("late identity message was lost")
+	}
+}
+
+func TestShowModeUnconfirmedSendPausesWithoutResendOrSkip(t *testing.T) {
+	a := browserTestApp(t)
+	_ = a.SaveMessageSettings(model.NewMessageSettings("opener\nreply", ""))
+	f := &fakeDOMBackend{controls: browser.DOMControls{HasInput: true, Buttons: []string{"SKIP"}}}
+	r := testLiveRunner(a, f)
+	ctx := context.Background()
+	r.step(ctx)
+	f.failSend = true
+	f.addRow("partner", "hi")
+	r.step(ctx)
+	for i := 0; i < 4; i++ {
+		r.step(ctx)
+	}
+	if !r.paused || f.sentCount("reply") != 1 || f.clickCount("SKIP") != 0 {
+		t.Fatal("uncertain send was retried/skipped")
+	}
+}
+
+func TestShowModePartnerChangeDuringDelayDiscardsOldQueue(t *testing.T) {
+	a := browserTestApp(t)
+	_ = a.SaveMessageSettings(model.NewMessageSettings("opener\nreply", ""))
+	f := &fakeDOMBackend{controls: browser.DOMControls{HasInput: true, Buttons: []string{"SKIP"}}}
+	r := testLiveRunner(a, f)
+	r.replyDelay = 40 * time.Millisecond
+	ctx := context.Background()
+	r.step(ctx)
+	f.addRow("partner", "hi")
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		time.Sleep(5 * time.Millisecond)
+		f.mu.Lock()
+		f.controls.Partner = "new partner"
+		f.rows = nil
+		f.mu.Unlock()
+	}()
+	r.step(ctx)
+	<-done
+	if f.sentCount("reply") != 0 {
+		t.Fatal("old reply leaked to new partner")
+	}
+	r.step(ctx)
+	if f.sentCount("opener") != 2 {
+		t.Fatal("new conversation did not open")
+	}
+}
+
+func TestShowModeUnchangedPageAfterSkipDoesNotRegreet(t *testing.T) {
+	a := browserTestApp(t)
+	_ = a.SaveMessageSettings(model.NewMessageSettings("opener", ""))
+	f := &fakeDOMBackend{controls: browser.DOMControls{HasInput: true, Buttons: []string{"NO ACTION"}}}
+	r := testLiveRunner(a, f)
+	ctx := context.Background()
+	r.step(ctx)
+	f.addRow("partner", "next")
+	r.step(ctx)
+	for i := 0; i < 4; i++ {
+		r.step(ctx)
+	}
+	if f.sentCount("opener") != 1 || !r.rotating {
+		t.Fatal("old page was greeted again after failed skip")
+	}
+}
+
+func TestShowModeResetDuringFinalSendNeverSkipsNewConversation(t *testing.T) {
+	a := browserTestApp(t)
+	_ = a.SaveMessageSettings(model.NewMessageSettings("opener\nreply", ""))
+	f := &fakeDOMBackend{controls: browser.DOMControls{HasInput: true, Buttons: []string{"SKIP"}}}
+	r := testLiveRunner(a, f)
+	ctx := context.Background()
+	r.step(ctx)
+	// Custom responder ends with a two-line reply; simulate a rematch after line 1.
+	r.responder = endingLiveTestResponder{}
+	f.sendHook = func() { f.controls.Partner = "new partner"; f.rows = nil }
+	f.addRow("partner", "go")
+	r.step(ctx)
+	if r.rotating || f.clickCount("SKIP") != 0 || f.sentCount("second") != 0 {
+		t.Fatal("stale reply/skip crossed conversation boundary")
+	}
+}
+
+type endingLiveTestResponder struct{}
+
+func (endingLiveTestResponder) Start() []string { return nil }
+func (endingLiveTestResponder) Reply(string) ([]string, bool) {
+	return []string{"first", "second"}, true
+}
+
+func TestShowModeLiveUsernameRenderingAndNoUsernameGate(t *testing.T) {
+	a := browserTestApp(t)
+	settings := model.NewMessageSettings("hello\nadd %username%", "test-handle")
+	_ = a.SaveMessageSettings(settings)
+	responder, _, err := a.newLiveResponder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	responder.Start()
+	lines, _ := responder.Reply("hi")
+	if len(lines) != 1 || lines[0] != "add test-handle" {
+		t.Fatalf("unrendered handle: %v", lines)
+	}
+	settings.Usernames = ""
+	_ = a.SaveMessageSettings(settings)
+	if _, _, err := a.newLiveResponder(); err == nil {
+		t.Fatal("sequence without required username accepted")
+	}
+	settings.ChatMode = model.ChatModeEVAChat
+	_ = a.SaveMessageSettings(settings)
+	responder, _, err = a.newLiveResponder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	responder.Start()
+	lines, end := responder.Reply("whats ur snap")
+	if !end || strings.Contains(strings.Join(lines, " "), "%username%") {
+		t.Fatal("EVA bypassed no-username gate")
 	}
 }

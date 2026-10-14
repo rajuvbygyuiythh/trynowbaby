@@ -1,6 +1,24 @@
 # Project memory — trynowbaby / ChitChat Bot
 
-Last reviewed: **2026-10-14 (UTC)**. This is a documentation-only handoff requested by the owner: read the project and save memory on GitHub. No application code, configuration, dependencies, or archive contents were changed.
+## Current update — targeted Show Mode fix (2026-10-14)
+
+The owner has now authorized implementation, superseding the earlier read-only
+scope below. Editable source is extracted under `root-project/`; the original ZIP
+is unchanged. Production modifications are limited to
+`internal/browser/domchat.go`, new `internal/browser/showmode_dom.js`, and
+`live_chat.go`. Tests/test wiring and scoped docs are updated. Ordinary browser
+login drivers, workers, AI core, license, proxy, frontend and lockfiles remain
+byte-identical to the archive. Read `root-project/docs/SHOW_MODE_FIX.md` for scope
+and evidence, and `root-project/docs/SHOW_MODE.md` for use/debugging. New detector
+uses stable IDs, grouped authors and a DOM observer, not time/text guesses.
+Show Mode local handle rendering/no-username gating is fixed; worker counters and
+AI compose are still not added. Full verification remains BLOCKED; real Windows
+site testing NOT_RUN. A separately named UNVERIFIED source ZIP is supplied.
+No merge/deployment or remote publication is implied by this implementation.
+
+---
+
+Last reviewed (original archive): **2026-10-14 (UTC)**. This is a documentation-only handoff requested by the owner: read the project and save memory on GitHub. No application code, configuration, dependencies, or archive contents were changed.
 
 ## 1. Read this first: actual repository layout
 
@@ -276,3 +294,5 @@ Historical docs also report isolated helper tests, prior engine tests, fake-DOM/
 ## Decision log
 
 - **2026-10-14 — Read-only project memory:** owner asked to read the project and add memory on GitHub. Added this external handoff for the ZIP-only repository, including architecture, owner decisions, source-review caveats and exact verification limitations. Original ZIP/application source unchanged. Archive CRC, all manifest payload hashes and included log hashes checked successfully; application/live tests NOT_RUN.
+
+- **2026-10-14 — Show Mode implementation authorized:** extracted source without replacing the original archive; implemented exact DOM selectors/observer, ID queue, identity filtering, native input/send confirmation and generation-safe rotation within three Show Mode production files. Added isolated synthetic tests and test wiring; see the current-update section and scoped report. No changes to worker/core engines, normal browser drivers, license, proxy or frontend. Full Windows/live verification remains pending.

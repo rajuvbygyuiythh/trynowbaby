@@ -84,6 +84,7 @@ function main() {
     "tests/contracts.test.cjs",
     "tests/package.test.cjs",
     "tests/verification.test.cjs",
+    "tests/showmode-dom.test.cjs",
   ]);
   const go = process.env.GO_BINARY || "go";
   const goAvailable = run("go-toolchain", go, ["version"]);

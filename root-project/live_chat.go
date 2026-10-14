@@ -75,9 +75,10 @@ func (r *sequenceLiveResponder) Reply(string) ([]string, bool) {
 }
 
 type evaLiveResponder struct {
-	engine *bot.EVAChatEngine
-	state  *model.EVAChatSession
-	rng    *rand.Rand
+	engine   *bot.EVAChatEngine
+	state    *model.EVAChatSession
+	rng      *rand.Rand
+	username string
 }
 
 func evaLines(result bot.EVAReplyResult) []string {
@@ -94,12 +95,20 @@ func evaLines(result bot.EVAReplyResult) []string {
 }
 
 func (r *evaLiveResponder) Start() []string {
-	return evaLines(r.engine.Start(r.state, r.rng))
+	return r.render(r.engine.Start(r.state, r.rng))
 }
 
 func (r *evaLiveResponder) Reply(incoming string) ([]string, bool) {
-	result := r.engine.Reply(incoming, r.state, r.rng)
-	return evaLines(result), result.Ended
+	result := r.engine.ReplyWithOptions(incoming, r.state, r.rng, bot.EVAReplyOptions{HasUsernames: r.username != ""})
+	return r.render(result), result.Ended
+}
+
+func (r *evaLiveResponder) render(result bot.EVAReplyResult) []string {
+	lines := evaLines(result)
+	for i, line := range lines {
+		lines[i] = strings.NewReplacer("%username%", r.username, "{snap}", r.username).Replace(line)
+	}
+	return lines
 }
 
 func liveSequences(settings model.MessageSettings) [][]string {
@@ -119,6 +128,11 @@ func (a *App) newLiveResponder() (liveResponder, string, error) {
 		return nil, "", err
 	}
 	mode := settings.EffectiveChatMode()
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	username := ""
+	if handles := settings.UsernameLines(); len(handles) > 0 {
+		username = handles[rng.Intn(len(handles))]
+	}
 	if mode == model.ChatModeEVAChat {
 		dataRoot, err := bot.EnsureEVAChatData(a.dataDir)
 		if err != nil {
@@ -130,77 +144,65 @@ func (a *App) newLiveResponder() (liveResponder, string, error) {
 		}
 		session := bot.NewEVAChatSession()
 		return &evaLiveResponder{
-			engine: engine,
-			state:  &session,
-			rng:    rand.New(rand.NewSource(time.Now().UnixNano())),
+			engine:   engine,
+			state:    &session,
+			rng:      rng,
+			username: username,
 		}, "EVAChat Flow", nil
 	}
-	return &sequenceLiveResponder{
-		sequences: liveSequences(settings),
-		rng:       rand.New(rand.NewSource(time.Now().UnixNano())),
-	}, mode, nil
+	sequences := liveSequences(settings)
+	for i, seq := range sequences {
+		for j, line := range seq {
+			if username == "" && (strings.Contains(line, "%username%") || strings.Contains(line, "{snap}")) {
+				return nil, "", fmt.Errorf("Show Mode sequence needs a Message → Usernames entry")
+			}
+			sequences[i][j] = strings.NewReplacer("%username%", username, "{snap}", username).Replace(line)
+		}
+	}
+	return &sequenceLiveResponder{sequences: sequences, rng: rng}, mode, nil
 }
 
-// ---------------------------------------------------------------------------
-// DOM runner: state machine over the visible page.
-//   no input  -> lobby: click START when present, otherwise keep watching
-//   input     -> chatting: seed rows, greet, answer new partner rows,
-//                skip at flow end; "chat ended" returns to lobby
-// ---------------------------------------------------------------------------
-
+// DOM runner: single-consumer queue over the observer's retained rows. Unknown
+// authors are not guessed; uncertain sends pause until a different conversation.
 type liveRunner struct {
-	dom          browser.DOMChatBackend
-	prefix       string
-	logf         func(level, message string)
-	newResponder func() (liveResponder, string, error)
-	replyDelay   time.Duration
-	pollInterval time.Duration
-
-	convActive    bool
+	dom           browser.DOMChatBackend
+	prefix        string
+	logf          func(string, string)
+	newResponder  func() (liveResponder, string, error)
+	replyDelay    time.Duration
+	pollInterval  time.Duration
+	conversation  string
+	controls      browser.DOMControls
 	responder     liveResponder
-	seenCounts    map[string]int
-	sentEcho      map[string]int
-	echoAuthors   map[string]int
-	ownName       string
-	partnerName   string
+	seenIDs       map[string]bool
+	queuedIDs     map[string]bool
+	queue         []browser.DOMMessage
+	paused        bool
+	rotating      bool
 	lastStartAt   time.Time
-	probeLogged   bool
+	lastRotateAt  time.Time
 	lastStepError string
+	probeLogged   bool
 }
 
-func (a *App) runLiveChat(ctx context.Context, backend browser.Backend, login model.LoginInfo, profileName string, index int, total int) {
-	prefix := fmt.Sprintf("[%s show-live %d/%d]", profileName, index, total)
+func (a *App) runLiveChat(ctx context.Context, backend browser.Backend, _ model.LoginInfo, profileName string, index, total int) {
 	dom, ok := backend.(browser.DOMChatBackend)
 	if !ok {
-		a.log("error", fmt.Sprintf("%s Live chat needs the Rod backend; the %s backend cannot drive the page DOM, so the browser will close as usual.", prefix, backend.Name()))
+		a.log("activity", "SHOW MODE ERROR | backend does not support DOM chat")
 		return
 	}
-	r := &liveRunner{
-		dom:          dom,
-		prefix:       prefix,
-		logf:         a.log,
-		replyDelay:   900 * time.Millisecond,
-		pollInterval: 1500 * time.Millisecond,
-		seenCounts:   make(map[string]int),
-		sentEcho:     make(map[string]int),
-		echoAuthors:  make(map[string]int),
-		newResponder: a.newLiveResponder,
-	}
-	a.log("activity", fmt.Sprintf("%s LIVE CHAT started (browser DOM mode). Login/match manually if needed; close the browser window to stop.", prefix))
+	r := &liveRunner{dom: dom, prefix: fmt.Sprintf("[%s show-live %d/%d]", profileName, index, total),
+		logf: a.log, newResponder: a.newLiveResponder, replyDelay: 900 * time.Millisecond, pollInterval: 350 * time.Millisecond}
+	a.log("activity", r.prefix+" DOM READY | browser-only chat watcher started; close its browser window to stop")
 	r.run(ctx)
-	a.log("activity", fmt.Sprintf("%s LIVE CHAT stopped.", prefix))
+	a.log("activity", r.prefix+" LIVE CHAT stopped")
 }
 
 func (r *liveRunner) run(ctx context.Context) {
 	ticker := time.NewTicker(r.pollInterval)
 	defer ticker.Stop()
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		if r.step(ctx) {
+		if ctx.Err() != nil || r.step(ctx) {
 			return
 		}
 		select {
@@ -211,200 +213,157 @@ func (r *liveRunner) run(ctx context.Context) {
 	}
 }
 
-// step performs one watch cycle. Returns true when the runner must stop.
+func (r *liveRunner) reset(c browser.DOMControls) {
+	r.conversation = c.Conversation
+	r.controls = c
+	r.responder = nil
+	r.seenIDs = make(map[string]bool)
+	r.queuedIDs = make(map[string]bool)
+	r.queue = nil
+	r.paused = false
+	r.rotating = false
+	r.probeLogged = false
+	r.lastStepError = ""
+	r.lastRotateAt = time.Time{}
+	r.lastStartAt = time.Time{}
+}
+
 func (r *liveRunner) step(ctx context.Context) bool {
-	controls, err := r.dom.DOMControls(ctx)
+	snapshot, err := r.dom.ReadDOMSnapshot(ctx)
 	if err != nil {
 		if r.pageGone(err) {
 			return true
 		}
-		r.logStepError(fmt.Sprintf("page state check failed: %v", err))
+		r.logStepError("DOM READ FAILED | " + err.Error())
 		return false
 	}
-	if controls.Partner != "" {
-		r.partnerName = controls.Partner
+	c := snapshot.Controls
+	if c.Conversation == "" {
+		r.logStepError("DOM NOT READY | missing conversation identity")
+		return false
 	}
-
-	if controls.ChatEnded && r.convActive {
-		r.logf("activity", fmt.Sprintf("%s PARTNER LEFT | chat ended on page; looking for a new match.", r.prefix))
-		r.convActive = false
+	if c.Conversation != r.conversation {
+		r.reset(c)
+	}
+	r.controls = c
+	if c.Overflow {
+		r.paused = true
+		r.logStepError("QUEUE FULL | paused safely; start a new chat")
+		return false
+	}
+	if c.Phase != "chatting" {
 		r.responder = nil
-		r.lastStartAt = time.Time{}
-	}
-
-	if !controls.HasInput {
-		if r.convActive {
-			r.convActive = false
-			r.responder = nil
-			r.logf("info", fmt.Sprintf("%s Chat input disappeared; back to watching for a new chat.", r.prefix))
-		}
-		if hasDOMButton(controls.Buttons, "START") {
-			if time.Since(r.lastStartAt) > 6*time.Second {
-				r.lastStartAt = time.Now()
-				clicked, err := r.dom.ClickDOMButton(ctx, []string{"START"})
-				if err != nil {
-					if r.pageGone(err) {
-						return true
-					}
-					r.logStepError(fmt.Sprintf("START click failed: %v", err))
-				} else if clicked != "" {
-					r.logf("activity", fmt.Sprintf("%s START clicked | matching with a new partner...", r.prefix))
+		r.queue = nil
+		if hasDOMButton(c.Buttons, "START") && time.Since(r.lastStartAt) > 6*time.Second {
+			r.lastStartAt = time.Now()
+			clicked, err := r.dom.ClickDOMButton(ctx, []string{"START"})
+			if err != nil {
+				if r.pageGone(err) {
+					return true
 				}
+				r.logStepError("START FAILED | " + err.Error())
+			} else if clicked != "" {
+				r.logf("activity", r.prefix+" START clicked | waiting for a new conversation")
 			}
 		} else if !r.probeLogged {
 			r.probeLogged = true
-			probe, perr := r.dom.DOMProbe(ctx)
-			if perr == nil {
-				r.logf("info", fmt.Sprintf("%s Page probe: %s", r.prefix, probe))
-			}
-			r.logf("info", fmt.Sprintf("%s Chat box not visible yet. If the page is waiting, click START/match manually once; the bot keeps watching.", r.prefix))
-		}
-		return false
-	}
-
-	// Chat ended but the (disabled) input is still rendered: restart via
-	// START instead of greeting a dead conversation.
-	if controls.ChatEnded {
-		if hasDOMButton(controls.Buttons, "START") && time.Since(r.lastStartAt) > 6*time.Second {
-			r.lastStartAt = time.Now()
-			if _, err := r.dom.ClickDOMButton(ctx, []string{"START"}); err != nil && r.pageGone(err) {
-				return true
+			if probe, err := r.dom.DOMProbe(ctx); err == nil {
+				r.logf("activity", r.prefix+" PAGE PROBE | "+probe)
 			}
 		}
 		return false
 	}
-
-	// Chat input visible.
-	if !r.convActive {
-		return r.beginConversation(ctx)
+	if r.rotating {
+		return r.rotate(ctx)
 	}
-
-	rows, err := r.dom.ExtractDOMMessages(ctx)
-	if err != nil {
-		if r.pageGone(err) {
-			return true
-		}
-		r.logStepError(fmt.Sprintf("message read failed: %v", err))
+	if r.paused {
 		return false
 	}
-	for _, m := range r.newRows(rows) {
-		if r.handlePartnerMessage(ctx, m) {
-			return true
-		}
-		if !r.convActive {
-			break // skipped mid-batch
-		}
-	}
-	return false
-}
-
-func (r *liveRunner) beginConversation(ctx context.Context) bool {
-	if rows, err := r.dom.ExtractDOMMessages(ctx); err == nil {
-		r.seedRows(rows)
-	} else if r.pageGone(err) {
-		return true
-	}
-	responder, mode, err := r.newResponder()
-	if err != nil {
-		r.logf("error", fmt.Sprintf("%s Reply engine unavailable (%v); incoming will be shown but not answered.", r.prefix, err))
-		responder = detectOnlyResponder{}
-		mode = "detect-only"
-	}
-	r.responder = responder
-	r.convActive = true
-	r.logf("activity", fmt.Sprintf("%s CHAT STARTED | partner: %s | reply mode: %s", r.prefix, orUnknown(r.partnerName), mode))
-	return r.sendLines(ctx, responder.Start())
-}
-
-// newRows returns rows that appeared since the last snapshot (by
-// author+text counts, so repeated identical texts are handled per copy).
-func (r *liveRunner) newRows(rows []browser.DOMMessage) []browser.DOMMessage {
-	current := make(map[string]int)
-	for _, row := range rows {
-		current[domRowKey(row)]++
-	}
-	consumed := make(map[string]int)
-	var out []browser.DOMMessage
-	for _, row := range rows {
-		k := domRowKey(row)
-		consumed[k]++
-		if consumed[k] > r.seenCounts[k] {
-			out = append(out, row)
-		}
-	}
-	for k, v := range current {
-		if v > r.seenCounts[k] {
-			r.seenCounts[k] = v
-		}
-	}
-	return out
-}
-
-func (r *liveRunner) seedRows(rows []browser.DOMMessage) {
-	// Fresh baseline for this conversation: anything already rendered is
-	// history and must never be answered.
-	r.seenCounts = make(map[string]int)
-	for _, row := range rows {
-		r.seenCounts[domRowKey(row)]++
-	}
-}
-
-func domRowKey(m browser.DOMMessage) string {
-	return m.Author + "\x00" + m.Text
-}
-
-func (r *liveRunner) handlePartnerMessage(ctx context.Context, m browser.DOMMessage) bool {
-	text := strings.TrimSpace(m.Text)
-	if text == "" || isLiveSystemRow(m) {
+	if !c.CanSend || c.Partner == "" || c.OwnName == "" || strings.EqualFold(c.Partner, c.OwnName) {
+		r.logStepError("DOM WAIT | composer or own/partner identity not ready; no guessed replies")
 		return false
 	}
-	// Own echo: the page re-renders what we typed. Match by exact text that
-	// we recently sent and learn our display name from the row.
-	if r.sentEcho[text] > 0 && (r.partnerName == "" || m.Author != r.partnerName) {
-		r.sentEcho[text]--
-		// Learn our own display name only from repeated echoes: a partner
-		// who happens to send the same text once must never be muted.
-		if m.Author != "" {
-			r.echoAuthors[m.Author]++
-			if r.echoAuthors[m.Author] >= 2 {
-				r.ownName = m.Author
+	if r.responder == nil {
+		// Only the first snapshot is history. Rows arriving during opener/send remain
+		// in the browser queue and are processed on the next cycle.
+		for _, row := range snapshot.Messages {
+			if row.ID != "" {
+				r.seenIDs[row.ID] = true
 			}
 		}
+		responder, mode, err := r.newResponder()
+		if err != nil {
+			r.paused = true
+			r.logStepError("REPLY ENGINE FAILED | " + err.Error())
+			return false
+		}
+		r.responder = responder
+		r.logf("activity", fmt.Sprintf("%s CHAT STARTED | mode=%s history=%d observer=%t", r.prefix, mode, len(r.seenIDs), c.ObserverReady))
+		return r.sendLines(ctx, responder.Start())
+	}
+	for _, row := range snapshot.Messages {
+		if row.ID == "" || r.seenIDs[row.ID] || r.queuedIDs[row.ID] || strings.TrimSpace(row.Text) == "" {
+			continue
+		}
+		if strings.EqualFold(row.Author, c.OwnName) {
+			r.seenIDs[row.ID] = true
+			continue
+		}
+		if !strings.EqualFold(row.Author, c.Partner) {
+			r.logStepError("AUTHOR UNKNOWN | unread row retained; no text-only echo guessing")
+			continue
+		}
+		r.queue = append(r.queue, row)
+		r.queuedIDs[row.ID] = true
+	}
+	if len(r.queue) == 0 {
 		return false
 	}
-	if r.ownName != "" && m.Author == r.ownName {
-		return false
-	}
-	if r.partnerName == "" && m.Author != "" {
-		r.partnerName = m.Author
-	}
-
-	r.logf("activity", fmt.Sprintf("%s INCOMING | %s: %q", r.prefix, orUnknown(m.Author), truncateLive(text, 120)))
+	m := r.queue[0]
+	r.logf("activity", fmt.Sprintf("%s INCOMING | partner row accepted; pending=%d", r.prefix, len(r.queue)))
 	if sleepLive(ctx, r.replyDelay) {
 		return true
 	}
-	lines, end := r.responder.Reply(text)
+	// Do not let a slow reply or an old batch leak into the next partner's chat.
+	if !r.stillCurrent(ctx) {
+		return ctx.Err() != nil
+	}
+	generation := r.conversation
+	lines, end := r.responder.Reply(m.Text)
+	r.seenIDs[m.ID] = true
+	delete(r.queuedIDs, m.ID)
+	r.queue = r.queue[1:]
 	if r.sendLines(ctx, lines) {
 		return true
 	}
-	if end {
-		r.logf("activity", fmt.Sprintf("%s SKIP | flow finished; clicking Skip/START for a new partner.", r.prefix))
-		clicked, err := r.dom.ClickDOMButton(ctx, []string{"Skip", "End Chat", "End", "START", "New Chat", "Start"})
-		if err != nil {
-			if r.pageGone(err) {
-				return true
-			}
-			r.logf("error", fmt.Sprintf("%s Skip click failed: %v", r.prefix, err))
-		} else if clicked == "" {
-			r.logf("error", fmt.Sprintf("%s Skip requested but no Skip/START button was found on the page. Click it manually once; the bot keeps watching.", r.prefix))
-		} else {
-			r.logf("activity", fmt.Sprintf("%s Clicked %q for the next partner.", r.prefix, clicked))
-		}
-		r.convActive = false
-		r.responder = nil
-		r.lastStartAt = time.Time{} // match again without the lobby throttle
+	if r.conversation != generation || r.responder == nil {
+		return false
+	}
+	if end && !r.paused {
+		r.queue = nil
+		r.rotating = true
+		return r.rotate(ctx)
 	}
 	return false
+}
+
+func (r *liveRunner) stillCurrent(ctx context.Context) bool {
+	s, err := r.dom.ReadDOMSnapshot(ctx)
+	if err != nil {
+		r.paused = true
+		r.logStepError("DOM RECHECK FAILED | " + err.Error())
+		return false
+	}
+	if s.Controls.Conversation != r.conversation || s.Controls.Phase != "chatting" {
+		r.reset(s.Controls)
+		return false
+	}
+	if !s.Controls.CanSend || s.Controls.Overflow {
+		r.paused = true
+		r.logStepError("SEND PAUSED | composer is not ready; inspect the page")
+		return false
+	}
+	return true
 }
 
 func (r *liveRunner) sendLines(ctx context.Context, lines []string) bool {
@@ -416,88 +375,82 @@ func (r *liveRunner) sendLines(ctx context.Context, lines []string) bool {
 		if i > 0 && sleepLive(ctx, 400*time.Millisecond) {
 			return true
 		}
+		if !r.stillCurrent(ctx) {
+			return ctx.Err() != nil
+		}
 		sent, err := r.dom.SendDOMMessage(ctx, line)
-		if err != nil {
-			if r.pageGone(err) {
-				return true
-			}
-			r.logf("error", fmt.Sprintf("%s Could not type reply into the page: %v", r.prefix, err))
+		if err != nil && r.pageGone(err) {
+			return true
+		}
+		if err != nil || !sent {
+			r.paused = true
+			r.logStepError("SEND UNCONFIRMED | automation paused; inspect the page before starting a new chat (no automatic resend)")
 			return false
 		}
-		if !sent {
-			r.logf("error", fmt.Sprintf("%s Reply %q was typed but did not appear in the chat; check the page (send button/Enter behaviour).", r.prefix, truncateLive(line, 80)))
-			return false
-		}
-		r.sentEcho[line]++
-		r.logf("activity", fmt.Sprintf("%s SEND | reply: %q", r.prefix, truncateLive(line, 120)))
+		r.logf("activity", r.prefix+" SEND CONFIRMED | new own message row observed")
 	}
+	return false
+}
+
+func (r *liveRunner) rotate(ctx context.Context) bool {
+	if time.Since(r.lastRotateAt) < 2*time.Second {
+		return false
+	}
+	r.lastRotateAt = time.Now()
+	s, err := r.dom.ReadDOMSnapshot(ctx)
+	if err != nil {
+		if r.pageGone(err) {
+			return true
+		}
+		r.logStepError("SKIP CHECK FAILED | " + err.Error())
+		return false
+	}
+	if s.Controls.Conversation != r.conversation {
+		r.reset(s.Controls)
+		return false
+	}
+	// Exact active aria-label only; hidden START/STOP labels never participate.
+	clicked, err := r.dom.ClickDOMButton(ctx, []string{"SKIP", "CONFIRM?", "START"})
+	if err != nil {
+		if r.pageGone(err) {
+			return true
+		}
+		r.logStepError("SKIP FAILED | " + err.Error())
+	} else if clicked == "" {
+		r.logStepError("SKIP WAIT | active cycle button unavailable; use the page manually")
+	} else {
+		r.logf("activity", r.prefix+" SKIP | clicked active "+clicked+"; awaiting conversation change")
+		r.lastStartAt = time.Time{}
+	}
+	// Do not greet the old page again just because click() returned successfully.
 	return false
 }
 
 func (r *liveRunner) pageGone(err error) bool {
-	if errors.Is(err, browser.ErrPageUnavailable) {
-		r.logf("activity", fmt.Sprintf("%s Browser page closed; live chat ending.", r.prefix))
-		return true
-	}
-	return false
+	return errors.Is(err, browser.ErrPageUnavailable) || errors.Is(err, context.Canceled)
 }
-
-func (r *liveRunner) logStepError(msg string) {
-	if msg == r.lastStepError {
-		return // do not spam the same failure every cycle
+func (r *liveRunner) logStepError(message string) {
+	if message == r.lastStepError {
+		return
 	}
-	r.lastStepError = msg
-	r.logf("error", fmt.Sprintf("%s %s", r.prefix, msg))
+	r.lastStepError = message
+	r.logf("activity", r.prefix+" "+message)
 }
-
 func hasDOMButton(buttons []string, label string) bool {
 	for _, b := range buttons {
 		if strings.EqualFold(strings.TrimSpace(b), label) {
 			return true
 		}
 	}
-	for _, b := range buttons {
-		if strings.Contains(strings.ToLower(b), strings.ToLower(label)) {
-			return true
-		}
-	}
 	return false
 }
-
-func isLiveSystemRow(m browser.DOMMessage) bool {
-	text := strings.ToLower(m.Text + " " + m.Author)
-	for _, marker := range []string{
-		"left the chat", "match found", "you are now chatting", "premium unlocks",
-		"messages like this can be hidden", "chat ended", "safety settings",
-	} {
-		if strings.Contains(text, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func orUnknown(s string) string {
-	if strings.TrimSpace(s) == "" {
-		return "partner"
-	}
-	return s
-}
-
-func truncateLive(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
-}
-
 func sleepLive(ctx context.Context, d time.Duration) bool {
-	t := time.NewTimer(d)
-	defer t.Stop()
+	timer := time.NewTimer(d)
+	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return true
-	case <-t.C:
+	case <-timer.C:
 		return false
 	}
 }

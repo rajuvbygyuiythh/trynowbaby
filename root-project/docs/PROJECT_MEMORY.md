@@ -9,7 +9,7 @@ after every meaningful change** (newest last). Never rewrite old entries.
 <!-- AUTO:BEGIN -->
 _Auto status 2026-10-14. Do not edit this block by hand._
 
-- Source fingerprint: `c5c7d79bfe6a91d3…`
+- Source fingerprint: `132ac2cf92e7d6ac…`
 - Browser options: `rod`, `chromedp`, `show_mode`
 - Capture tool: v1.2.1
 - Last verification: **BLOCKED** (PASS 5, FAIL 0, BLOCKED 8) — BLOCKED is not PASS; see `verification-output/report.json`
@@ -163,6 +163,18 @@ _Auto status 2026-10-14. Do not edit this block by hand._
   logger race regressions PASS. Full standard gate dependency-BLOCKED and native
   Windows display acceptance NOT_RUN. See HOME_CHAT.md for scope, test boundaries
   and usage. Owner approval preceded all code edits; no remote push implied.
+
+- 2026-10-15 — Owner requested fresh all-update recheck and full source ZIP.
+  No production code or dependencies modified. Node 62 PASS; Show Mode subset
+  separately 19 PASS; capture mock tests 12 PASS; actual logger's 13 race tests,
+  vet and Windows-target compilation PASS. Actual standard-library package
+  regressions/vet (workerplan/runtimeassets etc.) and standalone apitest unit
+  tests/vet PASS; no real API/browser run. Isolated exact transcript/runner/real
+  pinned Rod race tests/vet/Windows-target compilation repeated PASS; these are
+  NOT full App/Badger/Wails proof. Full standard gate remains dependency-BLOCKED;
+  native Windows/live display acceptance NOT_RUN. See RECHECK_2026-10-15.md. Do
+  not call all checks green or rename the source archive VERIFIED. Previous
+  working ZIPs unchanged; rechecked test-only download remains UNVERIFIED.
 
 ## Known limitations (keep honest)
 

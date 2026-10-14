@@ -12,7 +12,7 @@ _Auto-generated 2026-10-14 by `scripts/project-map.cjs`. Do not edit this block 
 
 ## Source inventory
 
-- Total source files: **177** (990.7 KiB, excluding runtime/private data)
+- Total source files: **178** (995.0 KiB, excluding runtime/private data)
 
 | Area | Files | Size |
 |---|---:|---:|
@@ -20,7 +20,7 @@ _Auto-generated 2026-10-14 by `scripts/project-map.cjs`. Do not edit this block 
 | `capture/` | 25 | 114.1 KiB |
 | `(root files)` | 24 | 159.7 KiB |
 | `apitest/` | 12 | 99.3 KiB |
-| `docs/` | 10 | 58.1 KiB |
+| `docs/` | 11 | 62.4 KiB |
 | `cmd/` | 9 | 78.8 KiB |
 | `scripts/` | 8 | 39.3 KiB |
 | `tests/` | 7 | 40.7 KiB |
@@ -65,6 +65,7 @@ _Auto-generated 2026-10-14 by `scripts/project-map.cjs`. Do not edit this block 
 - `docs/HOME_CHAT.md`
 - `docs/PROJECT_MAP.md`
 - `docs/PROJECT_MEMORY.md`
+- `docs/RECHECK_2026-10-15.md`
 - `docs/SHOW_MODE.md`
 - `docs/SHOW_MODE_FIX.md`
 - `docs/VERIFICATION.md`

@@ -30,7 +30,8 @@ owner Windows/real-proxy acceptance NOT_RUN. Docs: root-project/docs/NET_DOCTOR.
 `root-project-netdoctor-UNVERIFIED.zip` — 201 entries, packaged with
 `node scripts/package-source.cjs --allow-unverified` and re-validated with
 `--check` ("Archive integrity PASS"); SHA256
-`50b4b74ea1895fde6b3b4c8f31c71da8bcf9d020beb7c9ac2fc65f41bd94ad4e`; the bundled
+`db0c258e7f694d469a76159055c0d1ae6eafd236a3645f2cdc595077d8a4e515` (final
+package, CRLF `netdoctor.bat`); the bundled
 report is BLOCKED with liveBrowser NOT_RUN, so the UNVERIFIED label stays.
 
 ---

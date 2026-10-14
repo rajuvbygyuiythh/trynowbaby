@@ -49,7 +49,7 @@
         <header class="panel-header">
           <div>
             <h1>Home</h1>
-            <p>Activity and errors are saved to logs.txt beside the data folder.</p>
+            <p>Live browser conversations. Diagnostics are saved to logs.txt beside the data folder.</p>
           </div>
           <div class="actions">
             <button id="clean-profiles" class="secondary-button">Clean</button>
@@ -99,6 +99,18 @@
           </div>
         </div>
 
+        <section class="home-chat" aria-label="Live browser chat">
+          <div class="home-chat-toolbar">
+            <label for="chat-session">Conversation</label>
+            <select id="chat-session" aria-label="Select browser conversation">
+              <option value="">Latest active chat</option>
+            </select>
+          </div>
+          <p id="chat-history-note" class="summary-text" hidden></p>
+          <div id="chat-messages" class="home-chat-messages" tabindex="0" aria-label="User and bot messages">
+            <p class="home-chat-empty">Waiting for a Show Mode conversation.</p>
+          </div>
+        </section>
       </section>
 
       <section class="tab-panel" data-panel="proxy">

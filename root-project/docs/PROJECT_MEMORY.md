@@ -9,10 +9,10 @@ after every meaningful change** (newest last). Never rewrite old entries.
 <!-- AUTO:BEGIN -->
 _Auto status 2026-10-14. Do not edit this block by hand._
 
-- Source fingerprint: `00b6e1611785cfa9…`
+- Source fingerprint: `c5c7d79bfe6a91d3…`
 - Browser options: `rod`, `chromedp`, `show_mode`
 - Capture tool: v1.2.1
-- Last verification: no report found yet (`npm run verify`)
+- Last verification: **BLOCKED** (PASS 5, FAIL 0, BLOCKED 8) — BLOCKED is not PASS; see `verification-output/report.json`
 <!-- AUTO:END -->
 
 ## Decision log
@@ -147,6 +147,22 @@ _Auto status 2026-10-14. Do not edit this block by hand._
   Badger and native Windows logging test NOT_RUN. See FILE_LOGGING.md. A separate
   UNVERIFIED source archive preserves all frontend files; previous working ZIPs
   kept unchanged. No remote push or main merge implied.
+
+- 2026-10-15 — Owner approved read-only Home live User/Bot transcript plan.
+  Implemented separate in-memory bounded feed from actual Show Mode DOM rows,
+  ID/generation/run dedup, full-text safe UI render, row ordering reserved before
+  hydration, multi-browser/conversation selector, closed-session replay and
+  coalesced Wails notifications plus one-second resync. Optional native-send
+  snapshot hook retains final actual own row before Skip; no intent/draft is
+  displayed. runLiveChat only wraps/starts/stops a passive 250ms observer; all
+  reply/queue/rotation decisions and shared drivers/worker/AI/license/model/stores
+  remain unchanged. Diagnostic logger/logs.txt remains separate and unchanged;
+  raw SMS is not persisted. History: 500 messages/session, 12 sessions, visible
+  retention notices; desktop restart clears memory. Node 62 PASS; isolated real
+  production transcript/runner/Rod compilation and race tests/vet PASS; actual
+  logger race regressions PASS. Full standard gate dependency-BLOCKED and native
+  Windows display acceptance NOT_RUN. See HOME_CHAT.md for scope, test boundaries
+  and usage. Owner approval preceded all code edits; no remote push implied.
 
 ## Known limitations (keep honest)
 

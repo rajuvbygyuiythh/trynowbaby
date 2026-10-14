@@ -30,6 +30,7 @@ type App struct {
 	dataDir        string
 	uiStore        *uistore.Store
 	mu             sync.Mutex
+	chatFeed       *homeChatFeed
 	running        bool
 	runID          uint64
 	botCancel      context.CancelFunc
@@ -1126,4 +1127,9 @@ func (a *App) log(level string, message string) {
 	} else {
 		disk.Error(fmt.Sprintf("UI log persistence failed: %v", err))
 	}
+}
+
+// Separate read-only display API; settings/stats/logs contracts are unchanged.
+func (a *App) GetLiveChatSnapshot(sessionID string) homeChatSnapshot {
+	return a.homeChatFeed().snapshot(sessionID)
 }

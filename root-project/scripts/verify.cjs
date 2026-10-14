@@ -102,6 +102,7 @@ function main() {
       fmt,
       [
         "-l", "app.go", "main.go", "app_logging_test.go",
+        "home_chat.go", "home_chat_test.go", "live_chat.go", "internal/browser/domchat.go",
         "internal/applog/applog.go", "internal/applog/applog_test.go",
         "internal/applog/capture.go", "internal/applog/capture_test.go",
         "browser_run_test.go", "browser_lifecycle_test.go",

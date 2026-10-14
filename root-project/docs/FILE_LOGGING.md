@@ -85,3 +85,8 @@ Show Mode -> inspect logs.txt for DOM READY/INCOMING/SEND CONFIRMED -> close the
 browser and see stop/page diagnostics -> restart app and confirm old history
 remains. Clear Logs should not delete that history. On any error send a reviewed
 copy of logs.txt, not profiles, cookies, storage-state or the data directory.
+
+## Subsequent approved Home display
+
+Home now has a separate actual-message User/Bot transcript (HOME_CHAT.md). The
+technical log stream stays removed; file diagnostics behaviour is unchanged.

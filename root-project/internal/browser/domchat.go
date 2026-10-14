@@ -17,6 +17,7 @@ import (
 
 type DOMMessage struct {
 	ID     string `json:"id"`
+	Order  int    `json:"order"`
 	Author string `json:"author"`
 	Text   string `json:"text"`
 }
@@ -108,9 +109,18 @@ func (b *RodBackend) ClickDOMButton(ctx context.Context, labels []string) (strin
 // form.submit or synthetic KeyboardEvents. Success requires a NEW own row ID.
 // An uncertain delivery is never automatically retried (avoids duplicate sends).
 func (b *RodBackend) SendDOMMessage(ctx context.Context, text string) (bool, error) {
+	return b.SendDOMMessageObserved(ctx, text, nil)
+}
+
+// Optional Show Mode display hook. Every actual read is exposed, including the
+// final confirmed row before an immediate Skip. No proposed/draft text is emitted.
+func (b *RodBackend) SendDOMMessageObserved(ctx context.Context, text string, observe func(DOMSnapshot)) (bool, error) {
 	before, err := b.ReadDOMSnapshot(ctx)
 	if err != nil {
 		return false, err
+	}
+	if observe != nil {
+		observe(before)
 	}
 	if !before.Controls.CanSend || before.Controls.Overflow || before.Controls.OwnName == "" {
 		return false, fmt.Errorf("Show Mode composer/own identity unavailable; no send attempted")
@@ -141,6 +151,9 @@ func (b *RodBackend) SendDOMMessage(ctx context.Context, text string) (bool, err
 	if err != nil {
 		return false, err
 	}
+	if observe != nil {
+		observe(check)
+	}
 	if !sameDOMConversation(before.Controls, check.Controls) || !check.Controls.CanSend {
 		// A navigation/rematch occurred while typing. Never press Enter here.
 		return false, fmt.Errorf("Show Mode conversation changed while typing; inspect the draft")
@@ -156,6 +169,9 @@ func (b *RodBackend) SendDOMMessage(ctx context.Context, text string) (bool, err
 		after, err := b.ReadDOMSnapshot(ctx)
 		if err != nil {
 			return false, err
+		}
+		if observe != nil {
+			observe(after)
 		}
 		if !sameDOMConversation(before.Controls, after.Controls) {
 			return false, fmt.Errorf("Show Mode conversation changed before send confirmation")

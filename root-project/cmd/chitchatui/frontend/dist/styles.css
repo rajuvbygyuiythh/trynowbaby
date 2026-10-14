@@ -570,3 +570,14 @@ textarea {
   #browser-form .browser-run-row { gap: 8px; grid-template-columns: 24px minmax(0, 1fr) auto; }
   #browser-form .browser-common-controls { grid-template-columns: minmax(0, 1fr) 80px; }
 }
+
+/* Read-only Home transcript; no global form/browser styles are changed. */
+.home-chat { margin-top: 18px; }
+.home-chat-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.home-chat-toolbar select { flex: 1; min-width: 0; }
+.home-chat-messages { max-height: 440px; overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.home-chat-row { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px; padding: 9px 0; }
+.home-chat-row span { white-space: pre-wrap; overflow-wrap: anywhere; }
+.home-chat-user strong { color: var(--muted); }
+.home-chat-bot strong { color: var(--accent); }
+.home-chat-empty { color: var(--muted); margin: 4px 0; }

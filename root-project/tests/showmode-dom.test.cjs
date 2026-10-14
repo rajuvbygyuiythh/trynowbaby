@@ -106,3 +106,11 @@ test('same-name empty rematch resets before its first new incoming message',t=>{
  assert.notEqual(empty.controls.conversation,before.controls.conversation);assert.equal(empty.messages.length,0);
  append(d,'late-first','Test Partner','fresh');assert.equal(api.snapshot().controls.conversation,empty.controls.conversation);
 });
+
+test('transcript order is reserved before delayed text hydration',t=>{
+ const {api,d}=setup(t);
+ append(d,'late-text','Test Partner','');append(d,'next-own','Test Self','bot later');
+ api.snapshot();d.querySelector('[data-message-id="late-text"] p').textContent='user first';
+ const rows=api.snapshot().messages;
+ assert.ok(rows.find(r=>r.id==='late-text').order<rows.find(r=>r.id==='next-own').order);
+});

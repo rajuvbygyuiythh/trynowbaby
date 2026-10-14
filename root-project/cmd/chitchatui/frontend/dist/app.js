@@ -4,6 +4,7 @@ const state = {
   browserFormLoaded: false,
   browserRunPending: false,
   browserActivityVersion: 0,
+  chat: { version: -1, selected: "", manual: false, pending: false, dirty: false, token: 0, rendered: "" },
 };
 
 function backend() {
@@ -46,6 +47,76 @@ function setRunning(running) {
   if (cleanButton) {
     cleanButton.disabled = !!running;
     cleanButton.title = running ? "Stop the bot before cleaning profile data." : "";
+  }
+}
+
+// The transcript has its own event/API; it never parses technical log text.
+function renderChatTranscript(snapshot) {
+  const box = document.getElementById("chat-messages");
+  const select = document.getElementById("chat-session");
+  const follow = box.scrollHeight - box.scrollTop - box.clientHeight < 64;
+  const oldTop = box.scrollTop;
+  const changedConversation = state.chat.rendered !== snapshot.selected;
+  select.replaceChildren();
+  const automatic = document.createElement("option");
+  automatic.value = ""; automatic.textContent = "Latest active chat"; select.append(automatic);
+  const sessions = snapshot.sessions || [];
+  for (const session of sessions) {
+    const option = document.createElement("option");
+    option.value = session.id;
+    option.textContent = session.label + (session.active ? "" : " (ended)");
+    select.append(option);
+  }
+  if (state.chat.manual && !sessions.some(s => s.id === state.chat.selected)) {
+    state.chat.manual = false; state.chat.selected = "";
+  }
+  select.value = state.chat.manual ? state.chat.selected : "";
+  select.disabled = sessions.length === 0;
+  const current = sessions.find(s => s.id === snapshot.selected);
+  const note = document.getElementById("chat-history-note");
+  const notices = [];
+  if (current && current.dropped) notices.push(`${current.dropped} older messages outside the retained display window.`);
+  if (snapshot.evicted) notices.push(`${snapshot.evicted} older conversations no longer retained.`);
+  note.textContent = notices.join(" "); note.hidden = notices.length === 0;
+  const fragment = document.createDocumentFragment();
+  const seen = new Set();
+  for (const message of [...(snapshot.messages || [])].sort((a,b) => a.order - b.order)) {
+    if (!message.id || seen.has(message.id) || !["user", "bot"].includes(message.role)) continue;
+    seen.add(message.id);
+    const row = document.createElement("div");
+    row.className = `home-chat-row home-chat-${message.role}`;
+    row.dataset.messageId = message.id;
+    const label = document.createElement("strong");
+    label.textContent = message.role === "user" ? "User:" : "Bot:";
+    const text = document.createElement("span");
+    text.textContent = message.text; // Never innerHTML; messages may contain markup.
+    row.append(label, text); fragment.append(row);
+  }
+  if (!fragment.childNodes.length) {
+    const empty = document.createElement("p"); empty.className = "home-chat-empty";
+    empty.textContent = "Waiting for identified browser messages."; fragment.append(empty);
+  }
+  box.replaceChildren(fragment);
+  state.chat.rendered = snapshot.selected || "";
+  box.scrollTop = changedConversation || follow ? box.scrollHeight : oldTop;
+}
+
+async function refreshChatTranscript() {
+  // Fake/older backends need not expose the new optional display API.
+  if (!backend() || typeof backend().GetLiveChatSnapshot !== "function") return;
+  if (state.chat.pending) { state.chat.dirty = true; return; }
+  state.chat.pending = true; state.chat.dirty = false;
+  const token = ++state.chat.token;
+  try {
+    const snapshot = await invoke("GetLiveChatSnapshot", state.chat.manual ? state.chat.selected : "");
+    if (token === state.chat.token && snapshot.version >= state.chat.version) {
+      state.chat.version = snapshot.version;
+      renderChatTranscript(snapshot);
+    }
+  } catch (_) { /* invoke already forwards diagnostics to logs.txt. */ }
+  finally {
+    state.chat.pending = false;
+    if (state.chat.dirty) { state.chat.dirty = false; queueMicrotask(refreshChatTranscript); }
   }
 }
 
@@ -213,6 +284,7 @@ async function refreshState() {
   const snapshot = await invoke("GetInitialState");
   state.snapshot = snapshot;
   fillForms(snapshot);
+  await refreshChatTranscript();
 }
 
 async function autoRefreshStats() {
@@ -398,8 +470,17 @@ function bindActions() {
 
 function bindEvents() {
   const runtime = runtimeEvents();
+  document.getElementById("chat-session").addEventListener("change", (event) => {
+    state.chat.manual = !!event.target.value;
+    state.chat.selected = event.target.value;
+    state.chat.token++; // Ignore an older in-flight response for another selection.
+    refreshChatTranscript();
+  });
 
   if (typeof runtime.EventsOn === "function") {
+    runtime.EventsOn("ui:chat_changed", (event) => {
+      if (event && event.version > state.chat.version) refreshChatTranscript();
+    });
     runtime.EventsOn("ui:log", (entry) => {
       if (typeof entry.message === "string" && /\[[^\]]+ fresh \d+\/\d+\]/.test(entry.message)
           && !entry.message.includes("] Removed temporary browser data from ")) {
@@ -447,6 +528,7 @@ async function bootstrap() {
     try {
       await refreshState();
       setInterval(autoRefreshStats, 3000);
+      setInterval(refreshChatTranscript, 1000); // replay after missed events / closure
       return;
     } catch (error) {
       await new Promise((resolve) => setTimeout(resolve, 200));

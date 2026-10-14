@@ -194,3 +194,52 @@ test('uncaught frontend errors and rejected promises are forwarded without rende
     assert.equal(d.querySelector('#log-list, .log-entry'),null);
   } finally {dom.window.close();}
 });
+
+test('Home transcript renders full actual SMS in DOM order, never technical activity or HTML',()=>{
+ const {dom,w,d}=setup();
+ try {
+  const long='বাংলা\n🙂 '+ 'x'.repeat(20000);
+  w.renderChatTranscript({version:1,selected:'one',sessions:[{id:'one',label:'browser',active:true}],messages:[
+   {id:'u2',role:'user',text:'same',order:3},{id:'u1',role:'user',text:'same',order:1},
+   {id:'b1',role:'bot',text:long,order:2},{id:'b2',role:'bot',text:'<img src=x onerror=alert(1)>',order:4},
+   {id:'u1',role:'user',text:'duplicate',order:1},{id:'bad',role:'unknown',text:'not guessed',order:5}
+  ]});
+  const rows=[...d.querySelectorAll('.home-chat-row')];
+  assert.deepEqual(rows.map(r=>r.querySelector('strong').textContent),['User:','Bot:','User:','Bot:']);
+  assert.equal(rows[1].querySelector('span').textContent,long);
+  assert.equal(d.querySelector('#chat-messages img'),null);
+  assert.equal(d.querySelector('#log-list, .log-entry'),null);
+  assert.match(d.querySelector('#chat-messages').textContent,/<img src=x/);
+ } finally {dom.window.close();}
+});
+
+test('transcript UI coalesces events and ignores stale responses after conversation selection',async()=>{
+ let resolve;const calls=[];const events={};
+ const {dom,w,d}=setup({GetLiveChatSnapshot:key=>{calls.push(key);return new Promise(r=>resolve=r);}});
+ try {
+  w.runtime={EventsOn:(name,fn)=>events[name]=fn};w.bindEvents();
+  const first=w.refreshChatTranscript();events['ui:chat_changed']({version:2});events['ui:chat_changed']({version:3});
+  assert.equal(calls.length,1);
+  const option=d.createElement('option');option.value='selected';option.textContent='selected';d.getElementById('chat-session').append(option);
+  d.getElementById('chat-session').value='selected';d.getElementById('chat-session').dispatchEvent(new w.Event('change'));
+  resolve({version:1,selected:'old',sessions:[{id:'old',label:'old',active:false}],messages:[{id:'old',role:'bot',text:'stale reply',order:1}]});
+  await first;await new Promise(r=>setImmediate(r));assert.deepEqual(calls,['','selected']);
+  assert.doesNotMatch(d.getElementById('chat-messages').textContent,/stale reply/);
+  resolve({version:3,selected:'selected',sessions:[{id:'selected',label:'selected',active:true}],messages:[{id:'ok',role:'user',text:'chosen conversation',order:1}]});
+  await new Promise(r=>setImmediate(r));assert.match(d.getElementById('chat-messages').textContent,/chosen conversation/);
+  events['ui:log']({level:'activity',message:'SEND CONFIRMED technical only'});
+  assert.doesNotMatch(d.getElementById('chat-messages').textContent,/SEND CONFIRMED/);
+ } finally {dom.window.close();}
+});
+
+test('transcript keeps reader position, follows bottom, and announces bounded history',()=>{
+ const {dom,w,d}=setup();
+ try {
+  const box=d.getElementById('chat-messages');Object.defineProperty(box,'scrollHeight',{value:1000,configurable:true});Object.defineProperty(box,'clientHeight',{value:200,configurable:true});
+  const snapshot={version:1,selected:'one',sessions:[{id:'one',label:'one',active:false,dropped:30}],evicted:2,messages:[{id:'a',role:'user',text:'last',order:1}]};
+  w.renderChatTranscript(snapshot);box.scrollTop=100;w.renderChatTranscript(snapshot);assert.equal(box.scrollTop,100);
+  box.scrollTop=800;w.renderChatTranscript(snapshot);assert.equal(box.scrollTop,1000);
+  assert.match(d.getElementById('chat-history-note').textContent,/30 older messages/);
+  assert.match(d.getElementById('chat-history-note').textContent,/2 older conversations/);
+ } finally {dom.window.close();}
+});

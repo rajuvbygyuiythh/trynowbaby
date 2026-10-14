@@ -12,18 +12,18 @@ _Auto-generated 2026-10-14 by `scripts/project-map.cjs`. Do not edit this block 
 
 ## Source inventory
 
-- Total source files: **174** (956.1 KiB, excluding runtime/private data)
+- Total source files: **177** (990.7 KiB, excluding runtime/private data)
 
 | Area | Files | Size |
 |---|---:|---:|
-| `internal/` | 82 | 399.7 KiB |
+| `internal/` | 82 | 400.5 KiB |
 | `capture/` | 25 | 114.1 KiB |
-| `(root files)` | 22 | 140.8 KiB |
+| `(root files)` | 24 | 159.7 KiB |
 | `apitest/` | 12 | 99.3 KiB |
-| `cmd/` | 9 | 73.4 KiB |
-| `docs/` | 9 | 52.7 KiB |
-| `scripts/` | 8 | 39.2 KiB |
-| `tests/` | 7 | 36.9 KiB |
+| `docs/` | 10 | 58.1 KiB |
+| `cmd/` | 9 | 78.8 KiB |
+| `scripts/` | 8 | 39.3 KiB |
+| `tests/` | 7 | 40.7 KiB |
 
 ## Internal Go packages
 
@@ -62,6 +62,7 @@ _Auto-generated 2026-10-14 by `scripts/project-map.cjs`. Do not edit this block 
 - `docs/CHITCHAT_PROTOCOL.md`
 - `docs/DEBUG_CLEANUP.md`
 - `docs/FILE_LOGGING.md`
+- `docs/HOME_CHAT.md`
 - `docs/PROJECT_MAP.md`
 - `docs/PROJECT_MEMORY.md`
 - `docs/SHOW_MODE.md`

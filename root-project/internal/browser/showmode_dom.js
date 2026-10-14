@@ -28,7 +28,7 @@ const __sm = window.__chitchatShowModeDOMv2 || (() => {
     return clean(account?.querySelector('[role="img"][aria-label]')?.getAttribute('aria-label'));
   };
   const state = { document: `${Date.now()}-${Math.random()}`, generation: 0,
-    phase: '', partner: '', intro: null, rows: new Map(), revision: 0,
+    phase: '', partner: '', intro: null, rows: new Map(), positions: new Map(), nextPosition: 0, revision: 0,
     overflow: false, observer: null, scheduled: false, disposed: false };
   const MAX_ROWS = 2000; // fail closed rather than silently dropping unread rows
   function scan() {
@@ -51,6 +51,7 @@ const __sm = window.__chitchatShowModeDOMv2 || (() => {
     if (phase !== state.phase || (partner && state.partner && name(partner) !== name(state.partner)) || disjointRematch) {
       state.generation++;
       state.rows.clear();
+      state.positions.clear(); state.nextPosition = 0;
       state.overflow = false;
     }
     state.phase = phase;
@@ -60,6 +61,8 @@ const __sm = window.__chitchatShowModeDOMv2 || (() => {
     if (phase === 'chatting') for (const el of elements) {
       const id = el.getAttribute('data-message-id');
       if (!id) continue;
+      // Display ordering only; reserve a position before delayed text hydration.
+      if (!state.positions.has(id) && state.positions.size < MAX_ROWS) state.positions.set(id, ++state.nextPosition);
       const body = el.querySelector('p[data-from]');
       // data-from equals the MESSAGE id in the capture; never treat it as sender id.
       const text = (body?.textContent || '').replace(/\r/g, '').trim();
@@ -71,7 +74,7 @@ const __sm = window.__chitchatShowModeDOMv2 || (() => {
       const old = state.rows.get(id);
       if (!old && state.rows.size >= MAX_ROWS) { state.overflow = true; break; }
       if (!old || old.text !== text || old.author !== author) {
-        state.rows.set(id, { id, author, text });
+        state.rows.set(id, { id, author, text, order: state.positions.get(id) || old?.order || ++state.nextPosition });
         state.revision++;
       }
     }

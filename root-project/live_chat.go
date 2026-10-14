@@ -191,7 +191,9 @@ func (a *App) runLiveChat(ctx context.Context, backend browser.Backend, _ model.
 		a.log("activity", "SHOW MODE ERROR | backend does not support DOM chat")
 		return
 	}
-	r := &liveRunner{dom: dom, prefix: fmt.Sprintf("[%s show-live %d/%d]", profileName, index, total),
+	observed, stopTranscript := a.startHomeChatObserver(ctx, dom, profileName, index, total)
+	defer stopTranscript()
+	r := &liveRunner{dom: observed, prefix: fmt.Sprintf("[%s show-live %d/%d]", profileName, index, total),
 		logf: a.log, newResponder: a.newLiveResponder, replyDelay: 900 * time.Millisecond, pollInterval: 350 * time.Millisecond}
 	a.log("activity", r.prefix+" DOM READY | browser-only chat watcher started; close its browser window to stop")
 	r.run(ctx)

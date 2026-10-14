@@ -1,3 +1,20 @@
+## Latest handoff — Home User/Bot transcript (2026-10-15)
+
+Owner explicitly approved the scoped plan before implementation. New read-only
+Home display uses actual Show Mode DOM IDs/authors/full text, not technical log
+parsing or outgoing intent. Native-send snapshots preserve the final actual own
+row before Skip. Technical diagnostics stay in logs.txt; raw SMS transcript is
+in memory only. See root-project/docs/HOME_CHAT.md for exact scope/limits/tests.
+The full current source archive is root-project-home-chat-transcript-UNVERIFIED.zip;
+use it (not the older file-logging archive) if frontend assets need restoration.
+62 Node tests pass. Isolated actual transcript/runner/real pinned Rod Go race tests,
+vet and Windows-target test compilation pass; full desktop verification remains
+dependency-BLOCKED and native Windows/live transcript acceptance NOT_RUN.
+Existing workers/AI/license/proxy/stores/shared drivers/diagnostics logger remain
+unchanged. No remote push of this new feature has been performed.
+
+---
+
 ## Latest handoff — Home file logging (2026-10-15)
 
 Owner confirmed Show Mode v2 works on Windows. That chat/browser implementation

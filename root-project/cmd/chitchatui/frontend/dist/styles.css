@@ -581,3 +581,11 @@ textarea {
 .home-chat-user strong { color: var(--muted); }
 .home-chat-bot strong { color: var(--accent); }
 .home-chat-empty { color: var(--muted); margin: 4px 0; }
+
+/* Proxy diagnostics only. */
+#proxy-test-results p { overflow-wrap: anywhere; white-space: pre-wrap; }
+#proxy-test-results .proxy-test-pass { color: var(--accent); }
+#proxy-test-results .proxy-test-fail { color: #ff9c9c; }
+#test-proxy:disabled { opacity: .55; cursor: wait; }
+
+#proxy-test-results .proxy-test-warn { color: #efc46b; }

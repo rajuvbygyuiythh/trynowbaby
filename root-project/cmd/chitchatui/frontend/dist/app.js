@@ -313,7 +313,49 @@ function bindTabs() {
   });
 }
 
+function proxyInputLines() {
+  const raw = document.getElementById("proxy-entries").value;
+  if (document.getElementById("proxy-default-scheme").value !== "socks5") return raw;
+  return raw.split(/\r?\n/).map(line => {
+    const text = line.trim();
+    return text && !/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? "socks5://" + text : line;
+  }).join("\n");
+}
+
+async function testProxyEntries() {
+  const button = document.getElementById("test-proxy");
+  if (button.disabled) return;
+  const raw = proxyInputLines();
+  const status = document.getElementById("proxy-test-status");
+  const results = document.getElementById("proxy-test-results");
+  results.replaceChildren();
+  if (!raw.trim()) { status.textContent = "Enter at least one proxy to test."; return; }
+  button.disabled = true;
+  button.textContent = "Testing…";
+  status.textContent = "Testing proxy authentication and HTTPS access… (up to 12 seconds per proxy; four at a time)";
+  try {
+    const rows = await invoke("TestProxyEntries", raw);
+    let passed = 0, reachable = 0;
+    for (const row of rows || []) {
+      if (row.ok) passed++;
+      if (row.tunnel_ok) reachable++;
+      const item = document.createElement("p");
+      item.className = row.ok ? "proxy-test-pass" : row.tunnel_ok ? "proxy-test-warn" : "proxy-test-fail";
+      item.textContent = `Line ${row.line}: ${row.ok ? "PASS" : row.tunnel_ok ? "REACHABLE / SITE RESTRICTED" : "FAIL"} — ${row.label || "Invalid entry"} — ${row.latency_ms} ms${row.status ? ` — HTTP ${row.status}` : ""} — ${row.detail}`;
+      results.appendChild(item);
+    }
+    status.textContent = `${passed}/${(rows || []).length} passed; ${reachable} HTTPS tunnels verified. A successful test is not a browser-login guarantee.`;
+    if (proxyInputLines() !== raw) status.textContent += " List edited: these results are for the previous tested values; test again.";
+  } catch (error) {
+    status.textContent = error.message || String(error);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Test Proxy";
+  }
+}
+
 function bindForms() {
+  document.getElementById("test-proxy").addEventListener("click", testProxyEntries);
   // Enter must not submit/reload the page or implicitly choose a backend.
   document.getElementById("browser-form").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -408,7 +450,7 @@ function bindForms() {
     try {
       await invoke("SaveProxySettings", {
         enabled: document.getElementById("proxy-enabled").checked,
-        entries: document.getElementById("proxy-entries").value,
+        entries: proxyInputLines(),
       });
       await refreshState();
     } catch (error) {

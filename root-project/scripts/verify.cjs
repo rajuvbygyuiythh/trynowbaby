@@ -106,6 +106,10 @@ function main() {
         "internal/applog/applog.go", "internal/applog/applog_test.go",
         "internal/applog/capture.go", "internal/applog/capture_test.go",
         "browser_run_test.go", "browser_lifecycle_test.go",
+        "internal/browser/rod.go", "internal/browser/chromedp.go",
+        "internal/proxy/proxy.go", "internal/proxy/connect.go",
+        "internal/proxy/relay.go", "internal/proxy/testproxy.go",
+        "internal/proxy/proxy_test.go", "internal/proxy/relay_test.go",
       ],
       { emptyOutput: true },
     );

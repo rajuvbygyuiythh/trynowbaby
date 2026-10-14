@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"chitchatbot/internal/model"
+	"chitchatbot/internal/proxy"
 	"chitchatbot/internal/runtimeassets"
 	cdpfetch "github.com/chromedp/cdproto/fetch"
 
@@ -18,6 +19,7 @@ type ChromeDPBackend struct {
 	ctx         context.Context
 	allocCancel context.CancelFunc
 	cancel      context.CancelFunc
+	proxyRelay  *proxy.Relay
 }
 
 func (b *ChromeDPBackend) Name() string {
@@ -25,6 +27,22 @@ func (b *ChromeDPBackend) Name() string {
 }
 
 func (b *ChromeDPBackend) Start(parent context.Context, options Options) error {
+	var relay *proxy.Relay
+	success := false
+	if options.Proxy != nil {
+		var err error
+		relay, err = proxy.StartRelay(parent, *options.Proxy)
+		if err != nil {
+			return err
+		}
+		options.Proxy = &relay.Entry
+		defer func() {
+			if !success {
+				relay.Close()
+			}
+		}()
+	}
+
 	execOpts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.UserDataDir(options.UserDataDir),
 		chromedp.Flag("headless", options.Headless),
@@ -33,7 +51,7 @@ func (b *ChromeDPBackend) Start(parent context.Context, options Options) error {
 		chromedp.Flag("disable-extensions", true),
 	)
 	if options.Proxy != nil {
-		execOpts = append(execOpts, chromedp.ProxyServer(options.Proxy.BrowserURL()))
+		execOpts = append(execOpts, chromedp.ProxyServer(options.Proxy.BrowserURL()), chromedp.Flag("proxy-bypass-list", "<-loopback>"))
 	}
 	if bin, reason := runtimeassets.BundledChromiumPathForProfile(options.UserDataDir); bin != "" {
 		fmt.Printf("chromedp: using bundled browser: %s\n", bin)
@@ -81,6 +99,8 @@ func (b *ChromeDPBackend) Start(parent context.Context, options Options) error {
 		return err
 	}
 
+	success = true
+	b.proxyRelay = relay
 	b.ctx = ctx
 	b.cancel = cancel
 	b.allocCancel = allocCancel
@@ -88,6 +108,9 @@ func (b *ChromeDPBackend) Start(parent context.Context, options Options) error {
 }
 
 func (b *ChromeDPBackend) Close() error {
+	if b.proxyRelay != nil {
+		b.proxyRelay.Close()
+	}
 	if b.cancel != nil {
 		b.cancel()
 	}

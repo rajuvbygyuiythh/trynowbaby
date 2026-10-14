@@ -243,3 +243,41 @@ test('transcript keeps reader position, follows bottom, and announces bounded hi
   assert.match(d.getElementById('chat-history-note').textContent,/2 older conversations/);
  } finally {dom.window.close();}
 });
+
+test('Test Proxy checks unsaved form without saving, blocks repeats and renders literal results', async () => {
+  let resolve; const calls=[];
+  const {dom,w,d}=setup({TestProxyEntries:raw=>{calls.push(raw);return new Promise(r=>resolve=r);},SaveProxySettings:()=>{throw Error('must not save');}});
+  d.querySelector('#proxy-enabled').checked=false;
+  d.querySelector('#proxy-entries').value='socks5://host:1080:u:p\nhttp://host2:80';
+  const pending=w.testProxyEntries();
+  assert.equal(d.querySelector('#test-proxy').disabled,true);
+  await w.testProxyEntries();assert.equal(calls.length,1);
+  assert.equal(calls[0],d.querySelector('#proxy-entries').value);
+  d.querySelector('#proxy-entries').value='edited:80';
+  resolve([{line:1,label:'socks5://host:1080',ok:true,status:200,latency_ms:12,detail:'PASS'}, {line:2,label:'<img src=x>',ok:false,tunnel_ok:true,status:403,latency_ms:9,detail:'<script>bad</script>'}]);
+  await pending;
+  assert.equal(d.querySelector('#test-proxy').disabled,false);
+  assert.equal(d.querySelector('#test-proxy').textContent,'Test Proxy');
+  assert.match(d.querySelector('#proxy-test-status').textContent,/1\/2 passed.*List edited/);
+  assert.equal(d.querySelector('#proxy-test-results img, #proxy-test-results script'),null);
+  assert.match(d.querySelector('#proxy-test-results').textContent,/REACHABLE \/ SITE RESTRICTED.*HTTP 403/);
+  assert.equal(d.querySelector('#proxy-entries').value,'edited:80');
+  dom.window.close();
+});
+test('Test Proxy empty/error handling and SOCKS5 default do not alter explicit HTTP lines', async () => {
+  const calls=[];const {dom,w,d}=setup({TestProxyEntries:raw=>{calls.push(raw);throw Error('synthetic test error');}});
+  await w.testProxyEntries();assert.equal(calls.length,0);
+  d.querySelector('#proxy-default-scheme').value='socks5';
+  d.querySelector('#proxy-entries').value='host:1080:u:p\nhttp://other:80\n\n';
+  assert.equal(w.proxyInputLines(),'socks5://host:1080:u:p\nhttp://other:80\n\n');
+  await w.testProxyEntries();assert.equal(calls.length,1);
+  assert.match(d.querySelector('#proxy-test-status').textContent,/synthetic test error/);
+  assert.equal(d.querySelector('#test-proxy').disabled,false);
+  dom.window.close();
+});
+test('Proxy button is bound inside the existing form and does not submit Save Proxy', () => {
+  const {dom,w,d}=setup();
+  w.bindForms();
+  assert.equal(d.querySelector('#test-proxy').type,'button');
+  dom.window.close();
+});

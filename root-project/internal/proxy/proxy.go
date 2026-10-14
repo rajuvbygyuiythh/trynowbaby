@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"fmt"
+	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 )
@@ -41,62 +43,95 @@ func ParseList(raw string) ([]Entry, error) {
 	return result, nil
 }
 
+// ParseLine supports HTTP/SOCKS5 URL and provider-style host:port:user:pass.
+// Bare endpoints default to HTTP; use a socks5:// prefix for SOCKS5.
 func ParseLine(line string) (Entry, error) {
 	line = strings.TrimSpace(line)
-	if strings.Contains(line, "://") {
-		parsed, err := url.Parse(line)
-		if err != nil {
-			return Entry{}, fmt.Errorf("invalid proxy URL: %w", err)
-		}
-
-		scheme, err := normalizeScheme(parsed.Scheme)
+	scheme, rest := "http", line
+	if i := strings.Index(line, "://"); i >= 0 && !strings.ContainsAny(line[:i], ":@[]") {
+		var err error
+		scheme, err = normalizeScheme(line[:i])
 		if err != nil {
 			return Entry{}, err
 		}
-
-		host := strings.TrimSpace(parsed.Hostname())
-		port := strings.TrimSpace(parsed.Port())
-		if host == "" || port == "" {
-			return Entry{}, fmt.Errorf("expected %s://host:port", scheme)
+		rest = line[i+3:]
+	}
+	var entry Entry
+	partsCheck := strings.SplitN(rest, ":", 4)
+	providerStyle := false
+	if len(partsCheck) == 4 {
+		_, err := strconv.Atoi(partsCheck[1])
+		providerStyle = err == nil
+	}
+	if strings.HasPrefix(rest, "[") {
+		if end := strings.Index(rest, "]:"); end >= 0 {
+			providerStyle = len(strings.SplitN(rest[end+2:], ":", 3)) == 3
 		}
-
-		entry := Entry{
-			Scheme: scheme,
-			Host:   host,
-			Port:   port,
+	}
+	if strings.Contains(rest, "@") && !providerStyle {
+		parsed, err := url.Parse(scheme + "://" + rest)
+		if err != nil {
+			return Entry{}, fmt.Errorf("invalid proxy URL; URL-encode special characters in credentials")
 		}
+		if parsed.Path != "" && parsed.Path != "/" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return Entry{}, fmt.Errorf("proxy URL must contain only credentials and host:port")
+		}
+		entry = Entry{Scheme: scheme, Host: parsed.Hostname(), Port: parsed.Port()}
 		if parsed.User != nil {
 			entry.Username = parsed.User.Username()
 			entry.Password, _ = parsed.User.Password()
 		}
-		return entry, nil
-	}
+	} else {
 
-	parts := strings.Split(strings.TrimSpace(line), ":")
-	switch len(parts) {
-	case 2:
-		if parts[0] == "" || parts[1] == "" {
-			return Entry{}, fmt.Errorf("expected ip:port")
+		if strings.HasPrefix(rest, "[") {
+			// Bracketed IPv6 with optional provider-style credentials.
+			end := strings.Index(rest, "]:")
+			if end < 0 {
+				return Entry{}, fmt.Errorf("expected [IPv6]:port")
+			}
+			tail := strings.SplitN(rest[end+2:], ":", 3)
+			if len(tail) == 1 {
+				tail[0] = strings.TrimSuffix(tail[0], "/")
+			}
+			entry = Entry{Scheme: scheme, Host: rest[1:end], Port: tail[0]}
+			if len(tail) == 3 {
+				entry.Username = tail[1]
+				entry.Password = tail[2]
+			} else if len(tail) != 1 {
+				return Entry{}, fmt.Errorf("expected host:port:user:pass")
+			}
+		} else {
+			parts := strings.SplitN(rest, ":", 4)
+			if len(parts) == 2 {
+				parts[1] = strings.TrimSuffix(parts[1], "/")
+			}
+			if len(parts) != 2 && len(parts) != 4 {
+				return Entry{}, fmt.Errorf("expected host:port, host:port:user:pass or scheme://user:pass@host:port")
+			}
+			entry = Entry{Scheme: scheme, Host: parts[0], Port: parts[1]}
+			if len(parts) == 4 {
+				entry.Username = parts[2]
+				entry.Password = parts[3]
+			}
 		}
-		return Entry{
-			Scheme: "http",
-			Host:   parts[0],
-			Port:   parts[1],
-		}, nil
-	case 4:
-		if parts[0] == "" || parts[1] == "" || parts[2] == "" || parts[3] == "" {
-			return Entry{}, fmt.Errorf("expected ip:port:user:pass")
-		}
-		return Entry{
-			Scheme:   "http",
-			Host:     parts[0],
-			Port:     parts[1],
-			Username: parts[2],
-			Password: parts[3],
-		}, nil
-	default:
-		return Entry{}, fmt.Errorf("expected ip:port or ip:port:user:pass")
 	}
+	port, err := strconv.Atoi(entry.Port)
+	if err != nil || port < 1 || port > 65535 {
+		return Entry{}, fmt.Errorf("proxy port must be a number from 1 to 65535")
+	}
+	if entry.Host == "" || strings.ContainsAny(entry.Host, " /\\\t\r\n?#@") {
+		return Entry{}, fmt.Errorf("invalid proxy host")
+	}
+	if strings.ContainsAny(entry.Username+entry.Password, "\r\n") {
+		return Entry{}, fmt.Errorf("invalid proxy credentials")
+	}
+	if entry.HasAuth() && (entry.Username == "" || scheme == "socks5" && entry.Password == "") {
+		return Entry{}, fmt.Errorf("proxy authentication requires both username and password")
+	}
+	if scheme == "socks5" && (len(entry.Username) > 255 || len(entry.Password) > 255) {
+		return Entry{}, fmt.Errorf("SOCKS5 credentials must be at most 255 bytes each")
+	}
+	return entry, nil
 }
 
 func NewRotator(entries []Entry) *Rotator {
@@ -127,7 +162,7 @@ func (r *Rotator) Len() int {
 }
 
 func (e Entry) Address() string {
-	return e.Host + ":" + e.Port
+	return net.JoinHostPort(e.Host, e.Port)
 }
 
 func (e Entry) BrowserURL() string {
@@ -174,9 +209,9 @@ func normalizeScheme(value string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "", "http":
 		return "http", nil
-	case "socks5":
+	case "socks5", "socks5h", "sock5":
 		return "socks5", nil
 	default:
-		return "", fmt.Errorf("unsupported proxy scheme %q", value)
+		return "", fmt.Errorf("unsupported proxy protocol; use http:// or socks5://")
 	}
 }

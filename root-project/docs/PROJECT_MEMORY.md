@@ -9,7 +9,7 @@ after every meaningful change** (newest last). Never rewrite old entries.
 <!-- AUTO:BEGIN -->
 _Auto status 2026-10-14. Do not edit this block by hand._
 
-- Source fingerprint: `132ac2cf92e7d6ac…`
+- Source fingerprint: `18493c9fddfb4727…`
 - Browser options: `rod`, `chromedp`, `show_mode`
 - Capture tool: v1.2.1
 - Last verification: **BLOCKED** (PASS 5, FAIL 0, BLOCKED 8) — BLOCKED is not PASS; see `verification-output/report.json`
@@ -189,3 +189,17 @@ _Auto status 2026-10-14. Do not edit this block by hand._
 2. Run `npm run map:update` (or `npm run verify`, which does it first).
 3. Append one dated bullet to the decision log above: change + reason +
    verification evidence. Keep secrets, tokens and account data out.
+
+## 2026-10-15 — HTTP/SOCKS5 and dashboard Test Proxy
+
+Owner requested authenticated HTTP/SOCKS5 format support and in-dashboard tests.
+Added safe parser formats/IPv6/aliases, plain-line default protocol selector,
+unsaved 20-line/four-worker HTTPS checks with sanitized per-line results, and
+one loopback relay per Rod/Show Mode/ChromeDP proxied browser. Both test and
+browser use the same upstream CONNECT/SOCKS5 auth implementation; no direct
+fallback. Cleanup, TLS, failure classification and literal UI rendering tested.
+65 Node tests PASS; actual proxy race/vet PASS; actual browser/proxy sources
+compile/race/vet and Windows-target test compilation in pinned-dependency isolated
+module PASS. Not a native Wails/Windows/owner-proxy verification. Full gate BLOCKED.
+See PROXY_TEST.md. Latest full source: root-project-proxy-dashboard-UNVERIFIED.zip.
+No dependency lock, chat/AI/Home/worker/license changes. No new remote push.

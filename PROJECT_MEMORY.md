@@ -1,3 +1,13 @@
+## Latest feature handoff — 2026-10-15
+
+HTTP/SOCKS5 format support and dashboard Test Proxy implemented after owner's
+request. See root-project/docs/PROXY_TEST.md. Source delivery:
+root-project-proxy-dashboard-UNVERIFIED.zip (193 entries, 192 hashes PASS; SHA256 5224dfe870dabc7bee8ccb80bdc1a0306d1673387829df2b9c6914974360d41d). Unit/local synthetic checks PASS;
+full standard gate BLOCKED, native Windows/actual proxy NOT_RUN. No remote push
+for this feature yet; prior ba77d6f GitHub download remains older source.
+
+---
+
 ## Latest verification handoff — 2026-10-15
 
 All updates rechecked without production/test/dependency code changes. Fresh

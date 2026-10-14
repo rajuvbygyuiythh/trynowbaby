@@ -412,6 +412,17 @@ func (a *App) SaveMessageSettings(settings model.MessageSettings) error {
 	return nil
 }
 
+// TestProxyEntries tests the current form without saving or exposing credentials.
+func (a *App) TestProxyEntries(raw string) ([]proxy.TestResult, error) {
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 65*time.Second)
+	defer cancel()
+	return proxy.TestList(ctx, raw, "https://app.chitchat.gg/")
+}
+
 func (a *App) SaveProxySettings(settings model.ProxySettings) error {
 	if settings.Enabled {
 		entries, err := proxy.ParseList(settings.Entries)

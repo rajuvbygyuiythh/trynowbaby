@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"chitchatbot/internal/model"
+	"chitchatbot/internal/proxy"
 	"chitchatbot/internal/runtimeassets"
 
 	"github.com/go-rod/rod"
@@ -26,6 +27,7 @@ type RodBackend struct {
 	startURL            string
 	disablePageRecovery bool
 	stopProxyAuth       func()
+	proxyRelay          *proxy.Relay
 }
 
 func (b *RodBackend) Name() string {
@@ -33,6 +35,22 @@ func (b *RodBackend) Name() string {
 }
 
 func (b *RodBackend) Start(ctx context.Context, options Options) error {
+	var relay *proxy.Relay
+	success := false
+	if options.Proxy != nil {
+		var err error
+		relay, err = proxy.StartRelay(ctx, *options.Proxy)
+		if err != nil {
+			return err
+		}
+		options.Proxy = &relay.Entry
+		defer func() {
+			if !success {
+				relay.Close()
+			}
+		}()
+	}
+
 	controlURL, err := launchRodBrowser(ctx, options)
 	if err != nil {
 		return err
@@ -67,6 +85,8 @@ func (b *RodBackend) Start(ctx context.Context, options Options) error {
 		return err
 	}
 
+	success = true
+	b.proxyRelay = relay
 	b.browser = browser
 	b.page = page
 	b.startURL = options.StartURL
@@ -182,6 +202,9 @@ func waitForRodDebugURL(ctx context.Context, exitCh <-chan error, port int) (str
 }
 
 func (b *RodBackend) Close() error {
+	if b.proxyRelay != nil {
+		b.proxyRelay.Close()
+	}
 	if b.stopProxyAuth != nil {
 		b.stopProxyAuth()
 		b.stopProxyAuth = nil

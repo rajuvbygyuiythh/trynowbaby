@@ -21,6 +21,17 @@ unreachable here); owner's real Windows/proxy acceptance NOT_RUN.
 Docs: root-project/docs/PROXY_TEST.md ("Provider rejection diagnostics" +
 Webshare checklist) and root-project/docs/PROJECT_MEMORY.md.
 
+Source delivery for this change (owner asked for a full project ZIP + direct
+download): `root-project-proxy-diagnostics-UNVERIFIED.zip` at repository root,
+194 entries, built with `node scripts/package-source.cjs --allow-unverified` and
+re-validated with `--check` ("Archive integrity PASS", every payload hash and
+the Windows case/path safety rules verified). SHA256
+`11ade46280b1bebaff178021a552ccf98ed00e7eb3bf4e316d6b5a139cd110fb`. The bundled
+`VERIFICATION-REPORT.json` is BLOCKED (dependency download), so the archive keeps
+the UNVERIFIED label and `liveBrowser: NOT_RUN`; nothing in it is a claim that a
+real Windows browser/login run happened. Extract → `install.bat` builds and runs
+on Windows.
+
 ---
 
 ## Latest feature handoff — 2026-10-15

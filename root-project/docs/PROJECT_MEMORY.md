@@ -12,7 +12,7 @@ _Auto status 2026-10-14. Do not edit this block by hand._
 - Source fingerprint: `d925500ebaaed804…`
 - Browser options: `rod`, `chromedp`, `show_mode`
 - Capture tool: v1.2.1
-- Last verification: no report found yet (`npm run verify`)
+- Last verification: **BLOCKED** (PASS 5, FAIL 0, BLOCKED 8) — BLOCKED is not PASS; see `verification-output/report.json`
 <!-- AUTO:END -->
 
 ## Decision log
